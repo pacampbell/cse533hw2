@@ -1,0 +1,42 @@
+
+  This directory contains the modified code that permits us to pick up the
+  network masks using the ioctl version of get_ifi_info (Chapter 17).
+
+  Modifications have been introduced to the following files
+  (w.r.t. ~cse533/Stevens/unpv13e):
+
+  1. lib/get_ifi_info.c        here named      get_ifi_info_plus.c
+  2. lib/unpifi.h              here named      unpifiplus.h
+  3. ioctl/prifinfo.c          here named      prifinfo_plus.c
+
+
+  Modifications in file get_ifi_info_plus.c:
+  ------------------------------------------
+
+  function  get_ifi_info   renamed  get_ifi_info_plus
+                (plus, slight modification in the code)
+
+  function  Get_ifi_info   renamed  Get_ifi_info_plus
+                (but no modification in the code itself,
+                 except for having it call get_ifi_info_plus
+                 instead of get_ifi_info)
+
+  function  free_ifi_info  renamed  free_ifi_info_plus
+                (plus, slight modification in the code)
+
+
+  Modifications in file unpifiplus.h:
+  -----------------------------------
+
+  extra field introduced in structure ifi_info for sockaddr structure
+  that holds network mask
+
+
+  Modifications in file prifinfo_plus.c:
+  --------------------------------------
+
+  function  prifinfo  renamed  prifinfo_plus  (plus slight
+       modification in code so as to print out network mask)
+
+
+
