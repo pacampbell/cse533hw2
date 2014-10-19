@@ -4,15 +4,15 @@ all: $(shell mkdir -p $(BINDIR))
 all: $(PROJECTS)
 
 debug: CFLAGS := -DDEBUG
-debug: $(shell mkdir -p $(BINDIR))
+debug: $(MAKE_BIN)
 debug: $(PROJECTS)
 
 $(SERVER)-debug: CFLAGS := -DDEBUG
-$(SERVER)-debug: $(shell mkdir -p $(BINDIR))
+$(SERVER)-debug: $(MAKE_BIN)
 $(SERVER)-debug: $(SERVER)
 
 $(CLIENT)-debug: CFLAGS := -DDEBUG
-$(CLIENT)-debug: $(shell mkdir -p $(BINDIR))
+$(CLIENT)-debug: $(MAKE_BIN)
 $(CLIENT)-debug: $(CLIENT)
 
 $(SERVER): $(SRC)/server/*.c
@@ -22,4 +22,4 @@ $(CLIENT): $(SRC)/client/*.c
 	$(CC) $(IINC) $(CFLAGS) -o $(BINDIR)/$(CLIENT) $(SRC)/client/*.c
 
 clean:
-	rm -rf $(BINDIR)/* *.o
+	rm -rf $(BINDIR)/*

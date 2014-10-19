@@ -15,3 +15,9 @@ CLIENT = client
 
 # Set the directory to place the compiled binaries
 BINDIR = bin
+
+# Resources
+RESOURCES_DIR = resources
+
+# Make bin dir and copy files command
+MAKE_BIN = $(shell mkdir -p $(BINDIR) && cp $(RESOURCES_DIR)/*.in $(BINDIR))
