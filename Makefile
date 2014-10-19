@@ -7,13 +7,13 @@ debug: CFLAGS := -DDEBUG
 debug: $(shell mkdir -p $(BINDIR))
 debug: $(PROJECTS)
 
-server-debug: CFLAGS := -DDEBUG
-server-debug: $(shell mkdir -p $(BINDIR))
-server-debug: $(SERVER)
+$(SERVER)-debug: CFLAGS := -DDEBUG
+$(SERVER)-debug: $(shell mkdir -p $(BINDIR))
+$(SERVER)-debug: $(SERVER)
 
-client-debug: CFLAGS := -DDEBUG
-client-debug: $(shell mkdir -p $(BINDIR))
-client-debug: $(CLIENT)
+$(CLIENT)-debug: CFLAGS := -DDEBUG
+$(CLIENT)-debug: $(shell mkdir -p $(BINDIR))
+$(CLIENT)-debug: $(CLIENT)
 
 $(SERVER): $(SRC)/server/*.c
 	$(CC) $(IINC) $(CFLAGS) -o $(BINDIR)/$(SERVER) $(SRC)/server/*.c
