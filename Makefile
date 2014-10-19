@@ -1,6 +1,6 @@
 include Makefile.common
 
-all: $(shell mkdir -p $(BINDIR))
+all: $(MAKE_BIN)
 all: $(PROJECTS)
 
 debug: CFLAGS := -DDEBUG
