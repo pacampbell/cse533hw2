@@ -29,8 +29,6 @@
 *.hex
 
 # Project binaries
-server
-client
 prifinfo_plus
 
 # Project binary folders
