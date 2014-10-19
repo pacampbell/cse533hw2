@@ -27,3 +27,11 @@
 *.i*86
 *.x86_64
 *.hex
+
+# Project binaries
+server
+client
+prifinfo_plus
+
+# Project binary folders
+bin
