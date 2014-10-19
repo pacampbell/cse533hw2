@@ -2,7 +2,7 @@
 CC = gcc
 
 # Set the C flags to be used by the compiler
-CFLAGS = -g -Wall -Werror
+CFLAGS = -g -Wall -Werror -std=gnu89
 IINC = -Iinclude
 
 # List the source directories
