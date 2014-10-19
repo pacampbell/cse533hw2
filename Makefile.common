@@ -1,0 +1,17 @@
+# Set the C compiler
+CC = gcc
+
+# Set the C flags to be used by the compiler
+CFLAGS = -g -Wall -Werror
+IINC = -Iinclude
+
+# List the source directories
+SRC = src
+PROJECTS = $(SERVER) $(CLIENT)
+
+# Variables incase we need to change name
+SERVER = server
+CLIENT = client
+
+# Set the directory to place the compiled binaries
+BINDIR = bin
