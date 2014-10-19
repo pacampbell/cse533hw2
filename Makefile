@@ -21,5 +21,11 @@ $(SERVER): $(SRC)/server/*.c
 $(CLIENT): $(SRC)/client/*.c
 	$(CC) $(IINC) $(CFLAGS) -o $(BINDIR)/$(CLIENT) $(SRC)/client/*.c
 
+run-$(SERVER):
+	@./$(BINDIR)/$(SERVER)
+
+run-$(CLIENT):
+	@./$(BINDIR)/$(CLIENT)
+
 clean:
 	rm -rf $(BINDIR)/*
