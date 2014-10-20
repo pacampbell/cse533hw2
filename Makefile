@@ -3,15 +3,15 @@ include Makefile.common
 all: $(MAKE_BIN)
 all: $(PROJECTS)
 
-debug: CFLAGS := -DDEBUG
+debug: CFLAGS += -DDEBUG
 debug: $(MAKE_BIN)
 debug: $(PROJECTS)
 
-$(SERVER)-debug: CFLAGS := -DDEBUG
+$(SERVER)-debug: CFLAGS += -DDEBUG
 $(SERVER)-debug: $(MAKE_BIN)
 $(SERVER)-debug: $(SERVER)
 
-$(CLIENT)-debug: CFLAGS := -DDEBUG
+$(CLIENT)-debug: CFLAGS += -DDEBUG
 $(CLIENT)-debug: $(MAKE_BIN)
 $(CLIENT)-debug: $(CLIENT)
 
