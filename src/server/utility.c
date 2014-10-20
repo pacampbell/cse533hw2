@@ -8,7 +8,7 @@ bool parseConfig(char *path, Config *config) {
 			// Atempt to read the file line by line
 			char *line = NULL;
 			size_t len = 0;
-			ssize_t read;
+			size_t read;
 			// Read in the port value
 			if((read = getline(&line, &len, config_file)) != -1) {
 				config->port = (unsigned int) atoi(line);
