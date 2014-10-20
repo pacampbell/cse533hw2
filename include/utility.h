@@ -1,11 +1,11 @@
 #ifndef UTILITY_H
 #define UTILITY_H
-#define _POSIX_C_SOURCE
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include "debug.h"
+
+#define BUFFER_SIZE 256
 
 typedef struct {
 	unsigned int port;

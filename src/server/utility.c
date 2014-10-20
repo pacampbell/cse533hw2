@@ -6,17 +6,15 @@ bool parseConfig(char *path, Config *config) {
 		FILE *config_file = fopen(path, "r");
 		if(config_file != NULL) {
 			// Atempt to read the file line by line
-			char *line = NULL;
-			size_t len = 0;
-			size_t read;
+			char line[BUFFER_SIZE];
 			// Read in the port value
-			if((read = getline(&line, &len, config_file)) != -1) {
+			if(fgets(line, BUFFER_SIZE, config_file) != NULL) {
 				config->port = (unsigned int) atoi(line);
 			} else {
 				goto close;
 			}
 			// Read in the mtu size
-			if((read = getline(&line, &len, config_file)) != -1) {
+			if(fgets(line, BUFFER_SIZE, config_file) != NULL) {
 				config->mtu = (unsigned int) atoi(line); 
 			} else {
 				goto close;
