@@ -8,7 +8,7 @@ int main(int argc, char *argv[]) {
 	/* Attempt to parse the config */
 	if(parseConfig(path, &config)) {
 		debug("Port: %u\n", config.port);
-		debug("MTU: %u\n", config.mtu);
+		debug("Window Size: %u\n", config.win_size);
 		/* Config was successfully parsed; attempt to start server */
 		if((server_fd = createServer(config.port)) != -1) {
 			/* Start the servers main loop */

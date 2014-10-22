@@ -16,18 +16,30 @@
 // Utility structs
 typedef struct {
 	unsigned int port;
-	unsigned int mtu;
+	unsigned int win_size;      /* Maximum window size (in datagram units) */
+    /* additional config for the client */
+    struct in_addr serv_addr;   /* the ipv4 server address        */
+    char filename[BUFFER_SIZE]; /* the filename to be transferred */
+    unsigned int seed;          /* Random generator seed value    */
+    double loss;                /* Probability of datagram loss   */
+    unsigned int mean;          /* Mean of exp. dist. in millisec */
 } Config;
 
 /**
- * Attempts to open the configuration file and
- * parsed it.
- * @param path Path to 
+ * Attempt to open the configuration file and parse it.
+ * @param path Path to the config file
  * @param config
- * @return Returns true if the file was parsed successfully,
- * else false.
+ * @return Returns true if the file was parsed successfully, else false.
  */
 bool parseConfig(char *path, Config *config);
+
+/**
+ * Attempt to open the client configuration file and parse it.
+ * @param path Path to the client's config file
+ * @param config
+ * @return Returns true if the file was parsed successfully, else false.
+ */
+bool parseClientConfig(char *path, Config *config);
 
 /**
  * Binds a UDP socket to the provided port.
