@@ -10,6 +10,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 // Program headers
+#include "utility.h"
 #include "debug.h"
 
 #endif
