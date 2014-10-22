@@ -13,4 +13,8 @@
 #include "utility.h"
 #include "debug.h"
 
+int handshake(Config *config);
+
+int run(int conn_fd, Config *config);
+
 #endif

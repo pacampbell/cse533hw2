@@ -1,9 +1,5 @@
 #include "client.h"
 
-int run(int conn_fd, Config *config);
-
-int handshake(Config *config);
-
 int main(int argc, char *argv[]) {
 	debug("Client dummy program: %s\n", argv[0]);
 
@@ -14,8 +10,13 @@ int main(int argc, char *argv[]) {
 	debug("Begin parsing config file: %s\n", path);
 	/* Attempt to parse the config */
 	if(parseClientConfig(path, &config)) {
+		debug("Server Address: %s\n", inet_ntoa(config.serv_addr));
 		debug("Port: %u\n", config.port);
+		debug("Filename: %s\n", config.filename);
 		debug("Window Size: %u\n", config.win_size);
+		debug("Seed: %u\n", config.seed);
+		debug("Prob loss: %f%%\n", config.loss);
+		debug("Mean: %u\n", config.mean);
 		/* Config was successfully parsed; attempt to connect to server */
 		if((fd = handshake(&config)) >= 0) {
 			/* Start the client producer/consumer threads */
