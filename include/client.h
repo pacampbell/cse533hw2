@@ -1,8 +1,9 @@
 #ifndef CLIENT_H
 #define CLIENT_H
-// stdlib headers 
+// stdlib headers
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
 // system headers

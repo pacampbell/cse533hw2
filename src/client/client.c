@@ -3,7 +3,7 @@
 int main(int argc, char *argv[]) {
 	debug("Client dummy program: %s\n", argv[0]);
 
-	int fd;
+	int sockfd;
 	char *path = "client.in";
 	Config config;
 	struct sockaddr_in serv_addr, client_addr;
@@ -30,12 +30,12 @@ int main(int argc, char *argv[]) {
 		/* finish initializing addresses */
 		serv_addr.sin_port = htons(config.port);
 		client_addr.sin_port = htons(0);
-
-		fd = createSocket(&serv_addr, &client_addr, local);
+		/* socket create/bind/connect */
+		sockfd = createSocket(&serv_addr, &client_addr, local);
 		/* Config was successfully parsed; attempt to connect to server */
-		if((fd = handshake(&config, fd)) >= 0) {
+		if((sockfd = handshake(&config, sockfd)) >= 0) {
 			/* Start the client producer/consumer threads */
-			run(fd, &config);
+			run(sockfd, &config);
 		} else {
 			/* Unable to connect to server  */
 			fprintf(stderr, "handshake failed with server @ %s port %u\n",
@@ -71,16 +71,16 @@ bool chooseIPs(Config *config, struct in_addr *server_ip,
 int createSocket(struct sockaddr_in *serv_addr, struct sockaddr_in *client_addr,
 				 bool local) {
 	int sockfd;
+    int optval = 1;
 
 	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 	if(sockfd < 0) {
 		debug("Failed to create socket\n");
-		return sockfd;
+		return -1;
 	}
 	/* bind socket to the client's address */
 	if(bind(sockfd, (struct sockaddr*)client_addr,
 			sizeof(struct sockaddr_in)) < 0) {
-		debug("Failed to bind to client address\n");
 		perror("createSocket: bind");
 		close(sockfd);
 		return -1;
@@ -88,11 +88,21 @@ int createSocket(struct sockaddr_in *serv_addr, struct sockaddr_in *client_addr,
 	/* connect the DG socket to the server address */
 	if(connect(sockfd, (struct sockaddr*)serv_addr,
 				sizeof(struct sockaddr_in)) < 0) {
-		debug("Failed to connect to server address\n");
 		perror("createSocket: connect");
 		close(sockfd);
 		return -1;
 	}
+
+	/* set the socket SO_DONTROUTE option if we're local */
+	if(local) {
+		if(setsockopt(sockfd, SOL_SOCKET, SO_DONTROUTE, &optval,
+						sizeof(optval)) < 0) {
+			perror("setDontRoute: setsockopt");
+			close(sockfd);
+			return -1;
+		}
+	}
+	/* set the socket options to SO_DONTROUTE */
 	return sockfd;
 }
 
