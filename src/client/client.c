@@ -86,7 +86,7 @@ int createSocket(struct sockaddr_in *serv_addr, struct sockaddr_in *client_addr,
 		return -1;
 	}
 	/* connect the DG socket to the server address */
-	if(connect(sockfd, (struct sockaddr*)client_addr,
+	if(connect(sockfd, (struct sockaddr*)serv_addr,
 				sizeof(struct sockaddr_in)) < 0) {
 		debug("Failed to connect to server address\n");
 		perror("createSocket: connect");
