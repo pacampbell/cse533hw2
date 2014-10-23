@@ -33,3 +33,6 @@ prifinfo_plus
 
 # Project binary folders
 bin
+
+# Clion
+.idea/
