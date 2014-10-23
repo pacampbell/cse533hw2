@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <unistd.h>
 // system headers
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -44,9 +45,25 @@ bool parseClientConfig(char *path, Config *config);
 /**
  * Binds a UDP socket to the provided port.
  * @param port Port number to bind server socket to.
- * @return Returns the fd for the socket if creation was a success, 
+ * @return Returns the fd for the socket if creation was a success,
  * else SERVER_SOCKET_BIND_FAIL is returned.
  */
 int createServer(unsigned int port);
 
+/**
+ * Creates a UDP socket, binds to client_addr, connects to serv_addr,
+ * prints the IP/port after binding and connecting, and sets the
+ * SO_DONTROUTE socket option if local is true.
+ *
+ * !! This can be used by the client (operation 4.) and the server
+ * (operation 7.) !!
+ *
+ * @param serv_addr    Address to connect to
+ * @param client_addr  Address to bind to
+ * @param local        TRUE if the client/server address are local
+ * @return Returns the fd for the socket if creation was a success,
+ * else -1 is returned.
+ */
+int createClientSocket(struct sockaddr_in *serv_addr,
+                struct sockaddr_in *client_addr, bool local);
 #endif

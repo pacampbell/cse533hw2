@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
-#include <unistd.h>
 // system headers
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -28,9 +27,6 @@
  * @return Returns true if the address is local
  */
 bool chooseIPs(Config *config, struct in_addr *server_ip, struct in_addr *client_ip);
-
-
-int createSocket(struct sockaddr_in *serv_addr, struct sockaddr_in *client_addr, bool local);
 
 int handshake(Config *config, int sockfd);
 

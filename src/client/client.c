@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
 		serv_addr.sin_port = htons(config.port);
 		client_addr.sin_port = htons(0);
 		/* socket create/bind/connect */
-		sockfd = createSocket(&serv_addr, &client_addr, local);
+		sockfd = createClientSocket(&serv_addr, &client_addr, local);
 		/* Config was successfully parsed; attempt to connect to server */
 		if((sockfd = handshake(&config, sockfd)) >= 0) {
 			/* Start the client producer/consumer threads */
@@ -68,67 +68,11 @@ bool chooseIPs(Config *config, struct in_addr *server_ip,
 	return local;
 }
 
-int createSocket(struct sockaddr_in *serv_addr, struct sockaddr_in *client_addr,
-				 bool local) {
-	int sockfd;
-    int optval = 1;
-    socklen_t len = sizeof(struct sockaddr_in);
-
-	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-	if(sockfd < 0) {
-		debug("Failed to create socket\n");
-		return -1;
-	}
-	/* make sure our port is 0 */
-	client_addr->sin_port = htons(0);
-	/* bind socket to the client's address */
-	if(bind(sockfd, (struct sockaddr*)client_addr,
-			sizeof(struct sockaddr_in)) < 0) {
-		perror("createSocket: bind");
-		close(sockfd);
-		return -1;
-	}
-	/* Get the port we are bound to */
-	if(getsockname(sockfd, (struct sockaddr*)client_addr, &len) < 0) {
-		perror("createSocket: getsockname");
-		close(sockfd);
-		return -1;
-	}
-	/* print the IP and port we binded to */
-	printf("Client binded to IP: %s, port: %hu\n",
-			inet_ntoa(client_addr->sin_addr), ntohs(client_addr->sin_port));
-
-	/* connect the DG socket to the server address */
-	if(connect(sockfd, (struct sockaddr*)serv_addr,
-				sizeof(struct sockaddr_in)) < 0) {
-		perror("createSocket: connect");
-		close(sockfd);
-		return -1;
-	}
-	/* Get the peername we connected to */
-	len = sizeof(struct sockaddr_in);
-	if(getpeername(sockfd, (struct sockaddr*)serv_addr, &len) < 0) {
-		perror("createSocket: getpeername");
-		close(sockfd);
-		return -1;
-	}
-	/* print the IP and port we binded to */
-	printf("Client connected to server IP: %s, port: %hu\n",
-			inet_ntoa(serv_addr->sin_addr), ntohs(serv_addr->sin_port));
-
-	/* set the socket SO_DONTROUTE option if we're local */
-	if(local) {
-		if(setsockopt(sockfd, SOL_SOCKET, SO_DONTROUTE, &optval,
-						sizeof(optval)) < 0) {
-			perror("setDontRoute: setsockopt");
-			close(sockfd);
-			return -1;
-		}
-	}
-	/* set the socket options to SO_DONTROUTE */
-	return sockfd;
-}
-
+/**
+ * The client sends a datagram to the server giving the filename for the transfer.
+ * This send needs to be backed up by a timeout in case the datagram is lost.
+ *
+ */
 int handshake(Config *config, int sockfd) {
 	char *my_message = "this is a test message";
 
