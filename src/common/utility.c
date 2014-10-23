@@ -1,6 +1,6 @@
 #include "utility.h"
 
-bool parseConfig(char *path, Config *config) {
+bool parseServerConfig(char *path, Config *config) {
 	bool success = false;
 	if(path != NULL && config != NULL) {
 		FILE *config_file = fopen(path, "r");

@@ -32,7 +32,7 @@ typedef struct {
  * @param config
  * @return Returns true if the file was parsed successfully, else false.
  */
-bool parseConfig(char *path, Config *config);
+bool parseServerConfig(char *path, Config *config);
 
 /**
  * Attempt to open the client configuration file and parse it.

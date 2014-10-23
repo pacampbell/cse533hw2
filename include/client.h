@@ -11,6 +11,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 // Program headers
+#include "stcp.h"
 #include "utility.h"
 #include "debug.h"
 

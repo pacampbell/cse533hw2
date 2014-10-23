@@ -6,7 +6,7 @@ int main(int argc, char *argv[]) {
 	int server_fd = 0;
 	debug("Begin parsing %s\n", path);
 	/* Attempt to parse the config */
-	if(parseConfig(path, &config)) {
+	if(parseServerConfig(path, &config)) {
 		debug("Port: %u\n", config.port);
 		debug("Window Size: %u\n", config.win_size);
 		/* Config was successfully parsed; attempt to start server */
@@ -29,15 +29,21 @@ void run(int server_fd, Config *config) {
 	int recv_length = 0;
 	unsigned char buffer[SERVER_BUFFER_SIZE];
 	struct sockaddr_in connection_addr;
-	socklen_t connection_len = sizeof(connection_addr); 
+	socklen_t connection_len = sizeof(connection_addr);
 
 	debug("Server waiting on port %u\n", config->port);
 	while(running) {
 		recv_length = recvfrom(server_fd, buffer, SERVER_BUFFER_SIZE, 0, (struct sockaddr *)&connection_addr, &connection_len);
 		printf("received %d bytes\n", recv_length);
 		if (recv_length > 0) {
-                buffer[recv_length] = '\0';
-                printf("received message: '%s'\n", buffer);
-        }
+				buffer[recv_length] = '\0';
+				printf("received message: '%s'\n", buffer);
+				/* Send to client */
+				if(sendto(server_fd, "12345", 5, 0,
+						(struct sockaddr *)&connection_addr, connection_len) < 0) {
+					perror("run: sendto");
+					break;
+				}
+		}
 	}
 }

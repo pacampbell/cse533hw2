@@ -3,10 +3,11 @@
 int main(int argc, char *argv[]) {
 	debug("Client dummy program: %s\n", argv[0]);
 
-	int sockfd;
+	int fd;
 	char *path = "client.in";
 	Config config;
 	struct sockaddr_in serv_addr, client_addr;
+	struct stcp_sock stcp;
 	bool local;
 
 	/* Zero out the structs */
@@ -17,36 +18,63 @@ int main(int argc, char *argv[]) {
 
 	debug("Begin parsing config file: %s\n", path);
 	/* Attempt to parse the config */
-	if(parseClientConfig(path, &config)) {
-		debug("Server Address: %s\n", inet_ntoa(config.serv_addr));
-		debug("Port: %hu\n", config.port);
-		debug("Filename: %s\n", config.filename);
-		debug("Window Size: %u\n", config.win_size);
-		debug("Seed: %u\n", config.seed);
-		debug("Prob loss: %f%%\n", config.loss);
-		debug("Mean: %u\n", config.mean);
-
-		local = chooseIPs(&config, &serv_addr.sin_addr, &client_addr.sin_addr);
-		/* finish initializing addresses */
-		serv_addr.sin_port = htons(config.port);
-		client_addr.sin_port = htons(0);
-		/* socket create/bind/connect */
-		sockfd = createClientSocket(&serv_addr, &client_addr, local);
-		/* Config was successfully parsed; attempt to connect to server */
-		if((sockfd = handshake(&config, sockfd)) >= 0) {
-			/* Start the client producer/consumer threads */
-			run(sockfd, &config);
-		} else {
-			/* Unable to connect to server  */
-			fprintf(stderr, "handshake failed with server @ %s port %hu\n",
-				inet_ntoa(config.serv_addr), config.port);
-		}
-	} else {
+	if(!parseClientConfig(path, &config)) {
 		/* The config parsing failed */
 		debug("Failed to parse: %s\n", path);
 	}
+	debug("Server Address: %s\n", inet_ntoa(config.serv_addr));
+	debug("Port: %hu\n", config.port);
+	debug("Filename: %s\n", config.filename);
+	debug("Window Size: %u\n", config.win_size);
+	debug("Seed: %u\n", config.seed);
+	debug("Prob loss: %f%%\n", config.loss);
+	debug("Mean: %u\n", config.mean);
+
+	/* Check interfaces and determine if we are local */
+	local = chooseIPs(&config, &serv_addr.sin_addr, &client_addr.sin_addr);
+	/* finish initializing addresses */
+	serv_addr.sin_port = htons(config.port);
+	client_addr.sin_port = htons(0);
+	/* socket create/bind/connect */
+	fd = createClientSocket(&serv_addr, &client_addr, local);
+
+	/* initialize our STCP socket */
+	if(stcp_socket(fd, config.win_size, &stcp) < 0) {
+		fprintf(stderr, "stcp_socket failed\n");
+		exit(EXIT_FAILURE);
+	}
+	/* Try to establish a connection to the server */
+	if(stcp_connect(&stcp, config.filename) < 0) {
+		/* Unable to connect to server  */
+		fprintf(stderr, "Handshake failed with server @ %s port %hu\n",
+			inet_ntoa(config.serv_addr), config.port);
+		goto stcp_failure;
+	}
+	/* Start the producer and consumer threads  */
+	/* Both threads use the same stcp structure */
+
+	/* close the STCP socket */
+	if(stcp_close(&stcp) < 0) {
+		perror("main: stcp_close");
+		exit(EXIT_FAILURE);
+	}
+	// /* Config was successfully parsed; attempt to connect to server */
+	// if((fd = handshake(&config, fd)) >= 0) {
+	// 	/* Start the client producer/consumer threads */
+	// 	run(fd, &config);
+	// } else {
+	// 	/* Unable to connect to server  */
+	// 	fprintf(stderr, "handshake failed with server @ %s port %hu\n",
+	// 		inet_ntoa(config.serv_addr), config.port);
+	// }
 
 	return EXIT_SUCCESS;
+stcp_failure:
+	/* close the STCP socket */
+	if(stcp_close(&stcp) < 0) {
+		perror("main: stcp_close");
+	}
+	return EXIT_FAILURE;
 }
 
 bool chooseIPs(Config *config, struct in_addr *server_ip,
@@ -72,12 +100,17 @@ bool chooseIPs(Config *config, struct in_addr *server_ip,
  * The client sends a datagram to the server giving the filename for the transfer.
  * This send needs to be backed up by a timeout in case the datagram is lost.
  *
+ * 1. Send filename to server
+ * 2. Listen for port (timeout resend file)
+ * 3. Connect to port
+ * 4. Send ACK to server (timeout)
+ *
  */
-int handshake(Config *config, int sockfd) {
+int handshake(Config *config, int fd) {
 	char *my_message = "this is a test message";
 
 	/* send a message to the server */
-	if (send(sockfd, my_message, strlen(my_message), 0) < 0) {
+	if (send(fd, my_message, strlen(my_message), 0) < 0) {
 		perror("sendto failed");
 		return 0;
 	}

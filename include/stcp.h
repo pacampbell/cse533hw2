@@ -7,11 +7,12 @@
 #include <stdint.h>
 #include <string.h>
 #include <unistd.h>
+#include <arpa/inet.h>
 /* project headers */
 #include "debug.h"
 
 /* constants */
-#define STCP_MAX_DG 512
+#define STCP_MAX_SEG 512
 #define STCP_HDR_SIZE 12
 #define STCP_MAX_DATA 500
 
@@ -28,15 +29,20 @@ struct stcp_hdr {
 #define STCP_ACK  0x08
 };
 
-/* STCP recv circular buffer entry */
-struct stcp_seg {
-	/* STCP Segment */
+/* STCP Packet */
+struct stcp_pkt {
 	struct stcp_hdr hdr;		/* Segment header	*/
 	char data[STCP_MAX_DATA];	/* Segment data		*/
-
-	/* STCP Segment meta-data used to manage circular buffer */
 	uint32_t dlen;				/* Length of data */
-	uint8_t free;				/* Entry is free (can be overwritten) */
+};
+
+/* STCP recv circular buffer entry */
+struct stcp_seg {
+	/* STCP Packet */
+	struct stcp_pkt pkt;
+	/* STCP Segment meta-data used to manage circular buffer */
+	uint8_t valid;				/* Entry is valid this is set to 1
+									on recv and 0 on read */
 
 	/* For Receiving ??? */
 
@@ -58,6 +64,7 @@ struct stcp_rwin {
 struct stcp_sock {
 	/* Real DG socket */
 	int sockfd;
+	/* TODO: MUTEX for concurrent sender/receiver access */
 	/* I don't know what I'm doing */
 
 	/* For Receiving */
@@ -75,8 +82,27 @@ struct stcp_sock {
  *
  * @param sockfd A valid sockfd that has been created by createClientSocket
  * @param rwin   The maximum number of segments in the receiving window
- * @return An stcp_sock initialized for reading end or NULL on error
+ * @param sock   The stcp_sock to initialize
+ * @return 0 on success or -1 on error.
  */
-struct stcp_sock *stcp_socket(int sockfd, uint32_t rwin);
+int stcp_socket(int sockfd, uint16_t rwin, struct stcp_sock *sock);
+
+/*
+ * Free all memory associated with this stcp socket and close the
+ * underlying socket.
+ *
+ * @param sock  A stcp_sock initialized by stcp_socket
+ * @return 0 on successful connection or -1 on error.
+ */
+int stcp_close(struct stcp_sock *sock);
+
+/*
+ * Initialize a stcp connection to the server using the 3 way handshake
+ *
+ * @param sock  A stcp_sock initialized by stcp_socket
+ * @param file  The name of the file to download
+ * @return 0 on successful connection or -1 on error.
+ */
+int stcp_connect(struct stcp_sock *sock, char *file);
 
 #endif
