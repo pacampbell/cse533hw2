@@ -72,12 +72,15 @@ int createSocket(struct sockaddr_in *serv_addr, struct sockaddr_in *client_addr,
 				 bool local) {
 	int sockfd;
     int optval = 1;
+    socklen_t len = sizeof(struct sockaddr_in);
 
 	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 	if(sockfd < 0) {
 		debug("Failed to create socket\n");
 		return -1;
 	}
+	/* make sure our port is 0 */
+	client_addr->sin_port = htons(0);
 	/* bind socket to the client's address */
 	if(bind(sockfd, (struct sockaddr*)client_addr,
 			sizeof(struct sockaddr_in)) < 0) {
@@ -85,6 +88,16 @@ int createSocket(struct sockaddr_in *serv_addr, struct sockaddr_in *client_addr,
 		close(sockfd);
 		return -1;
 	}
+	/* Get the port we are bound to */
+	if(getsockname(sockfd, (struct sockaddr*)client_addr, &len) < 0) {
+		perror("createSocket: getsockname");
+		close(sockfd);
+		return -1;
+	}
+	/* print the IP and port we binded to */
+	printf("Client binded to IP: %s, port: %d\n",
+			inet_ntoa(client_addr->sin_addr), client_addr->sin_port);
+
 	/* connect the DG socket to the server address */
 	if(connect(sockfd, (struct sockaddr*)serv_addr,
 				sizeof(struct sockaddr_in)) < 0) {
