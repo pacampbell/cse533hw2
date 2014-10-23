@@ -9,7 +9,7 @@ bool parseConfig(char *path, Config *config) {
 			char line[BUFFER_SIZE];
 			/* Read in the port value */
 			if(fgets(line, BUFFER_SIZE, config_file) != NULL) {
-				config->port = (unsigned int) atoi(line);
+				config->port = (unsigned short) atoi(line);
 			} else {
 				goto close;
 			}
@@ -47,7 +47,7 @@ bool parseClientConfig(char *path, Config *config) {
 			}
 			/* Read in the server port value */
 			if(fgets(line, BUFFER_SIZE, config_file) != NULL) {
-				config->port = (unsigned int) atoi(line);
+				config->port = (unsigned short) atoi(line);
 			} else {
 				goto close;
 			}

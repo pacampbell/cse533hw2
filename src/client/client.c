@@ -19,7 +19,7 @@ int main(int argc, char *argv[]) {
 	/* Attempt to parse the config */
 	if(parseClientConfig(path, &config)) {
 		debug("Server Address: %s\n", inet_ntoa(config.serv_addr));
-		debug("Port: %u\n", config.port);
+		debug("Port: %hu\n", config.port);
 		debug("Filename: %s\n", config.filename);
 		debug("Window Size: %u\n", config.win_size);
 		debug("Seed: %u\n", config.seed);
@@ -38,7 +38,7 @@ int main(int argc, char *argv[]) {
 			run(sockfd, &config);
 		} else {
 			/* Unable to connect to server  */
-			fprintf(stderr, "handshake failed with server @ %s port %u\n",
+			fprintf(stderr, "handshake failed with server @ %s port %hu\n",
 				inet_ntoa(config.serv_addr), config.port);
 		}
 	} else {
@@ -95,8 +95,8 @@ int createSocket(struct sockaddr_in *serv_addr, struct sockaddr_in *client_addr,
 		return -1;
 	}
 	/* print the IP and port we binded to */
-	printf("Client binded to IP: %s, port: %d\n",
-			inet_ntoa(client_addr->sin_addr), client_addr->sin_port);
+	printf("Client binded to IP: %s, port: %hu\n",
+			inet_ntoa(client_addr->sin_addr), ntohs(client_addr->sin_port));
 
 	/* connect the DG socket to the server address */
 	if(connect(sockfd, (struct sockaddr*)serv_addr,
@@ -105,6 +105,16 @@ int createSocket(struct sockaddr_in *serv_addr, struct sockaddr_in *client_addr,
 		close(sockfd);
 		return -1;
 	}
+	/* Get the peername we connected to */
+	len = sizeof(struct sockaddr_in);
+	if(getpeername(sockfd, (struct sockaddr*)serv_addr, &len) < 0) {
+		perror("createSocket: getpeername");
+		close(sockfd);
+		return -1;
+	}
+	/* print the IP and port we binded to */
+	printf("Client connected to server IP: %s, port: %hu\n",
+			inet_ntoa(serv_addr->sin_addr), ntohs(serv_addr->sin_port));
 
 	/* set the socket SO_DONTROUTE option if we're local */
 	if(local) {

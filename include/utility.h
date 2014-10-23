@@ -15,7 +15,7 @@
 #define SERVER_SOCKET_BIND_FAIL -1
 // Utility structs
 typedef struct {
-	unsigned int port;
+	unsigned short port;
 	unsigned int win_size;      /* Maximum window size (in datagram units) */
     /* additional config for the client */
     struct in_addr serv_addr;   /* the ipv4 server address        */
