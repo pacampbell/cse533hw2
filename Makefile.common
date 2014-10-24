@@ -5,13 +5,30 @@ CC = gcc
 CFLAGS = -g -Wall -Werror -std=gnu89
 IINC = -Iinclude
 
+# Attempt to figure out what system we are on
+UNAME = $(shell uname)
+
+# Set libs used based on OS
+ifeq ($(UNAME), Linux)
+	# export CSE533_STEVENS_LIB=/path/to/libunp.a
+	LIBS = $(shell echo $(CSE533_STEVENS_LIB))
+	# export CSE533_STEVENS_INCLUDE=/path/to/unpv13e/lib
+	IINC += -I$(shell echo $(CSE533_STEVENS_INCLUDE))
+endif
+ifeq ($(UNAME), SunOS)
+	LIBS = /home/courses/cse533/Stevens/unpv13e_solaris2.10/libunp.a -lsocket -lnsl -lresolv 
+	IINC += -I/home/courses/cse533/Stevens/unpv13e_solaris2.10/lib
+endif
+
 # List the source directories
 SRC = src
-PROJECTS = $(SERVER) $(CLIENT)
+PROJECTS = $(IFFI) $(SERVER) $(CLIENT)
 
 # Variables incase we need to change name
 SERVER = server
 CLIENT = client
+IFI = Asgn2_code
+IFI_FILE = get_ifi_info_plus
 
 # Set the directory to place the compiled binaries
 BINDIR = bin
@@ -20,4 +37,4 @@ BINDIR = bin
 RESOURCES_DIR = resources
 
 # Make bin dir and copy files command
-MAKE_BIN = $(shell mkdir -p $(BINDIR) && cp $(RESOURCES_DIR)/*.in $(BINDIR))
+MAKE_BIN = $(shell mkdir -p $(BINDIR) && cp $(RESOURCES_DIR)/* $(BINDIR))

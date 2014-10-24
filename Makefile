@@ -15,11 +15,14 @@ $(CLIENT)-debug: CFLAGS += -DDEBUG
 $(CLIENT)-debug: $(MAKE_BIN)
 $(CLIENT)-debug: $(CLIENT)
 
-$(SERVER): $(SRC)/server/*.c $(SRC)/common/*.c
-	$(CC) $(IINC) $(CFLAGS) -o $(BINDIR)/$(SERVER) $(SRC)/server/*.c $(SRC)/common/*.c
+$(SERVER): $(SRC)/server/*.c $(SRC)/common/*.c $(IFI)
+	$(CC) $(IINC) $(CFLAGS) -o $(BINDIR)/$(SERVER) $(SRC)/server/*.c $(SRC)/common/*.c $(IFI)/$(IFI_FILE).o $(LIBS)
 
-$(CLIENT): $(SRC)/client/*.c $(SRC)/common/*.c
-	$(CC) $(IINC) $(CFLAGS) -o $(BINDIR)/$(CLIENT) $(SRC)/client/*.c $(SRC)/common/*.c
+$(CLIENT): $(SRC)/client/*.c $(SRC)/common/*.c $(IFI)
+	$(CC) $(IINC) $(CFLAGS) -o $(BINDIR)/$(CLIENT) $(SRC)/client/*.c $(SRC)/common/*.c $(IFI)/$(IFI_FILE).o $(LIBS)
+
+$(IFI): $(IFI)/$(IFI_FILE).c
+	$(CC) $(IINC) $(CFLAGS) -c $(IFI)/$(IFI_FILE).c $(LIBS)
 
 run-$(SERVER):
 	@cd $(BINDIR) && ./$(SERVER)
