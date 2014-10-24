@@ -39,6 +39,7 @@ void run(int server_fd, Config *config) {
     pkt.dlen = 4;
 
 	debug("Server waiting on port %u\n", config->port);
+	discoverInterfaces();
 	while(running) {
 		recv_length = recvfrom(server_fd, buffer, SERVER_BUFFER_SIZE, 0, (struct sockaddr *)&connection_addr, &connection_len);
 		printf("received %d bytes\n", recv_length);
@@ -53,4 +54,47 @@ void run(int server_fd, Config *config) {
 				}
 		}
 	}
+}
+
+void discoverInterfaces() {
+	struct ifi_info	*ifi, *ifihead;
+	struct sockaddr	*sa;
+	u_char *ptr;
+	int i = 0;
+
+	for (ifihead = ifi = Get_ifi_info_plus(AF_INET, 1); ifi != NULL; ifi = ifi->ifi_next) {
+		printf("%s: ", ifi->ifi_name);
+		if (ifi->ifi_index != 0)
+			printf("(%d) ", ifi->ifi_index);
+		printf("<");
+		if (ifi->ifi_flags & IFF_UP)			printf("UP ");
+		if (ifi->ifi_flags & IFF_BROADCAST)		printf("BCAST ");
+		if (ifi->ifi_flags & IFF_MULTICAST)		printf("MCAST ");
+		if (ifi->ifi_flags & IFF_LOOPBACK)		printf("LOOP ");
+		if (ifi->ifi_flags & IFF_POINTOPOINT)	printf("P2P ");
+		printf(">\n");
+		if ( (i = ifi->ifi_hlen) > 0) {
+			ptr = ifi->ifi_haddr;
+			do {
+				printf("%s%x", (i == ifi->ifi_hlen) ? "  " : ":", *ptr++);
+			} while (--i > 0);
+			printf("\n");
+		}
+		if (ifi->ifi_mtu != 0)
+			printf("  MTU: %d\n", ifi->ifi_mtu);
+
+		if ( (sa = ifi->ifi_addr) != NULL)
+			printf("  IP addr: %s\n",
+						Sock_ntop_host(sa, sizeof(*sa)));
+		if ( (sa = ifi->ifi_ntmaddr) != NULL)
+			printf("  network mask: %s\n",
+						Sock_ntop_host(sa, sizeof(*sa)));
+		if ( (sa = ifi->ifi_brdaddr) != NULL)
+			printf("  broadcast addr: %s\n",
+						Sock_ntop_host(sa, sizeof(*sa)));
+		if ( (sa = ifi->ifi_dstaddr) != NULL)
+			printf("  destination addr: %s\n",
+						Sock_ntop_host(sa, sizeof(*sa)));
+	}
+	free_ifi_info_plus(ifihead);
 }

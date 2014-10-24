@@ -24,4 +24,9 @@
  */
 void run(int server_fd, Config *config);
 
+/**
+ * Discovers unicast interfaces on the system.
+ */
+void discoverInterfaces();
+
 #endif
