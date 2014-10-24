@@ -48,7 +48,8 @@ int stcp_connect(struct stcp_sock *sock, char *file) {
 	uint16_t newport;
 	struct stcp_pkt pkt;
 	/* 1s timeout for connect + Select stuff */
-	struct timeval timeout = {1L, 0L};
+	int retries = 0, max_retries = 3, timeout = 1;
+	struct timeval tv = {1L, 0L};
 	int nfds;
 	fd_set rset;
 
@@ -77,7 +78,7 @@ int stcp_connect(struct stcp_sock *sock, char *file) {
 		FD_ZERO(&rset);
 		FD_SET(sock->sockfd, &rset);
 		nfds = sock->sockfd + 1;
-		if(select(nfds, &rset, NULL, NULL, &timeout) < 0) {
+		if(select(nfds, &rset, NULL, NULL, &tv) < 0) {
 			perror("stcp_connect: select");
 			return -1;
 		}
@@ -98,12 +99,19 @@ int stcp_connect(struct stcp_sock *sock, char *file) {
 			break;
 		}
 		/* timeout reached! */
-		/* Reset the timeout value to 1 second */
-        timeout.tv_sec = 1L;
-        timeout.tv_usec = 0L;
-		printf("Client initial connect timeout! Resending message with: %s\n", file);
+		retries++;
+		/* double the timeout period */
+		timeout <<= 1;
+		/* Reset the timeout */
+		tv.tv_sec = timeout;
+		tv.tv_usec = 0L;
+		if(retries > max_retries){
+			printf("Client reached max number of connection attempts\n");
+			return -1;
+		}
+		printf("Client connect timeout! Resending with %u sec timeout\n", (uint32_t)tv.tv_sec);
 	}
-		/* connect to new port */
+	/* connect to new port */
 
 	/* Send ACK */
 	return -1;
