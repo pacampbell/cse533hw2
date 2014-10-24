@@ -22,7 +22,7 @@ endif
 
 # List the source directories
 SRC = src
-PROJECTS = $(IFFI) $(SERVER) $(CLIENT)
+PROJECTS = $(SERVER) $(CLIENT)
 
 # Variables incase we need to change name
 SERVER = server
