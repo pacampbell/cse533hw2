@@ -124,14 +124,14 @@ int createClientSocket(struct sockaddr_in *serv_addr,
 
 	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 	if(sockfd < 0) {
-		perror("createSocket: socket");
+		perror("createClientSocket: socket");
 		return -1;
 	}
 	/* set the socket SO_DONTROUTE option if we're local */
 	if(local) {
 		if(setsockopt(sockfd, SOL_SOCKET, SO_DONTROUTE, &optval,
 						sizeof(optval)) < 0) {
-			perror("setDontRoute: setsockopt");
+			perror("createClientSocket: setsockopt");
 			close(sockfd);
 			return -1;
 		}
@@ -139,38 +139,45 @@ int createClientSocket(struct sockaddr_in *serv_addr,
 	/* bind socket to the client's address */
 	if(bind(sockfd, (struct sockaddr*)client_addr,
 			sizeof(struct sockaddr_in)) < 0) {
-		perror("createSocket: bind");
+		perror("createClientSocket: bind");
 		close(sockfd);
 		return -1;
 	}
 	/* Get the port we are bound to */
 	if(getsockname(sockfd, (struct sockaddr*)client_addr, &len) < 0) {
-		perror("createSocket: getsockname");
+		perror("createClientSocket: getsockname");
 		close(sockfd);
 		return -1;
 	}
 	/* print the IP and port we binded to */
-	printf("After bind: socket IP %s port %hu\n",
+	printf("UDP binded: socket\t IP %s port %hu\n",
 			inet_ntoa(client_addr->sin_addr), ntohs(client_addr->sin_port));
 
-	/* connect the DG socket to the server address */
-	if(connect(sockfd, (struct sockaddr*)serv_addr,
-				sizeof(struct sockaddr_in)) < 0) {
-		perror("createSocket: connect");
-		close(sockfd);
-		return -1;
-	}
-	/* Get the peername we connected to */
-	len = sizeof(struct sockaddr_in);
-	if(getpeername(sockfd, (struct sockaddr*)serv_addr, &len) < 0) {
-		perror("createSocket: getpeername");
-		close(sockfd);
-		return -1;
-	}
-	/* print the IP and port we connected to */
-	printf("After connect: peer IP %s port %hu\n",
-			inet_ntoa(serv_addr->sin_addr), ntohs(serv_addr->sin_port));
-
+	/* connect the UDP socket to the server address */
+    if(udpConnect(sockfd, serv_addr) < 0) {
+        return -1;
+    }
 	/* return the successfully created/binded/connected socket */
 	return sockfd;
+}
+
+int udpConnect(int sockfd, struct sockaddr_in *peer) {
+    socklen_t len = sizeof(struct sockaddr_in);
+
+    /* connect the UDP socket to the peer address */
+    if(connect(sockfd, (struct sockaddr*)peer,
+            sizeof(struct sockaddr_in)) < 0) {
+        perror("udpConnect: connect");
+        return -1;
+    }
+    /* Get the peername we connected to */
+    len = sizeof(struct sockaddr_in);
+    if(getpeername(sockfd, (struct sockaddr*)peer, &len) < 0) {
+        perror("udpConnect: getpeername");
+        return -1;
+    }
+    /* print the IP and port we connected to */
+    printf("UDP connected: peer\t IP %s port %hu\n",
+            inet_ntoa(peer->sin_addr), ntohs(peer->sin_port));
+    return 0;
 }

@@ -30,6 +30,13 @@ void run(int server_fd, Config *config) {
 	unsigned char buffer[SERVER_BUFFER_SIZE];
 	struct sockaddr_in connection_addr;
 	socklen_t connection_len = sizeof(connection_addr);
+    struct stcp_pkt pkt;
+    pkt.hdr.syn = htonl(0);
+    pkt.hdr.ack = htonl(1);
+    pkt.hdr.win = htons(config->win_size);
+    pkt.hdr.flags = htons(STCP_SYN | STCP_ACK);
+    strcpy(pkt.data, "5656");
+    pkt.dlen = 4;
 
 	debug("Server waiting on port %u\n", config->port);
 	while(running) {
@@ -39,7 +46,7 @@ void run(int server_fd, Config *config) {
 				buffer[recv_length] = '\0';
 				printf("received message: '%s'\n", buffer);
 				/* Send to client */
-				if(sendto(server_fd, "12345", 5, 0,
+				if(sendto(server_fd, &pkt, sizeof(pkt) + pkt.dlen, 0,
 						(struct sockaddr *)&connection_addr, connection_len) < 0) {
 					perror("run: sendto");
 					break;

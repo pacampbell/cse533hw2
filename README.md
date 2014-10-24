@@ -20,3 +20,10 @@ Offical assignment description is located [here](http://www3.cs.stonybrook.edu/~
 1. Navigate to the root directory of the project and type `./bin/server` or `./bin/client`
 or
 1. Type `make run-server` or `make run-client`
+
+
+##unprrt.h Modifications
+1. Changed Specifid constants (RTT_RXTMIN..)
+2. Changed to integer arithmetic rather than floating point.
+3. Changed base time to millisec instead of seconds
+3. Changed rtt_init to initialize rttvar to 3000 ms ((0.75s * 1000) << 4)

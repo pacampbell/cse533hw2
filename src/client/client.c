@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 	/* Try to establish a connection to the server */
-	if(stcp_connect(&stcp, config.filename) < 0) {
+	if(stcp_connect(&stcp, &serv_addr, config.filename) < 0) {
 		/* Unable to connect to server  */
 		fprintf(stderr, "Handshake failed with server @ %s port %hu\n",
 			inet_ntoa(config.serv_addr), config.port);

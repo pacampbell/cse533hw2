@@ -10,7 +10,9 @@
 #include <arpa/inet.h>
 // Program headers
 #include "utility.h"
+#include "stcp.h"
 #include "debug.h"
+
 
 #define SERVER_BUFFER_SIZE 2048
 
