@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 // system headers
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -66,4 +67,15 @@ int createServer(unsigned int port);
  */
 int createClientSocket(struct sockaddr_in *serv_addr,
                 struct sockaddr_in *client_addr, bool local);
+
+/**
+* Connects a UDP socket with the given peer, then prints out the
+* peer IP and Port to stdout.
+*
+* @param sockfd   A UDP socket
+* @param peer     Address to connect to
+* @return Returns -1 on failure 0 on success
+*/
+int udpConnect(int sockfd, struct sockaddr_in *peer);
+
 #endif

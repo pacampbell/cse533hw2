@@ -8,9 +8,11 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/select.h>
+#include <sys/socket.h>
 #include <arpa/inet.h>
 /* project headers */
 #include "debug.h"
+#include "utility.h"
 
 /* constants */
 #define STCP_MAX_SEG 512
@@ -36,6 +38,10 @@ struct stcp_pkt {
 	char data[STCP_MAX_DATA];	/* Segment data		*/
 	uint32_t dlen;				/* Length of data */
 };
+/* convert packet from/to host order */
+void hton_hdr(struct stcp_hdr *hdr);
+void ntoh_hdr(struct stcp_hdr *hdr);
+void print_hdr(struct stcp_hdr *hdr);
 
 /* STCP recv circular buffer entry */
 struct stcp_seg {
@@ -67,7 +73,7 @@ struct stcp_sock {
 	int sockfd;
 	/* TODO: MUTEX for concurrent sender/receiver access */
 	/* I don't know what I'm doing */
-
+    uint32_t recv_seq;
 	/* For Receiving */
 	uint16_t rwin_ad;	/* receive window size to advertise (in DG units) 	*/
 	struct stcp_rwin rwin;
@@ -104,6 +110,6 @@ int stcp_close(struct stcp_sock *sock);
  * @param file  The name of the file to download
  * @return 0 on successful connection or -1 on error.
  */
-int stcp_connect(struct stcp_sock *sock, char *file);
+int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *file);
 
 #endif
