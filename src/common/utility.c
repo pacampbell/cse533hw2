@@ -193,6 +193,7 @@ unsigned int convertIp(char *ipaddress) {
 		address = (address | b) << 8;
 		address = (address | c) << 8;
 		address = (address | d);
+		address = ntohl(address);
 	}
 	return address;
 }
