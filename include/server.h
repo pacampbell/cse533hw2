@@ -11,6 +11,7 @@
 // Program headers
 #include "utility.h"
 #include "stcp.h"
+#include "interfaces.h"
 #include "unpifiplus.h"
 #include "debug.h"
 
@@ -26,7 +27,8 @@ void run(int server_fd, Config *config);
 
 /**
  * Discovers unicast interfaces on the system.
+ * @return Returns all the unicast interfaces on the system.
  */
-void discoverInterfaces();
+Interface*  discoverInterfaces();
 
 #endif

@@ -56,45 +56,60 @@ void run(int server_fd, Config *config) {
 	}
 }
 
-void discoverInterfaces() {
+Interface* discoverInterfaces() {
 	struct ifi_info	*ifi, *ifihead;
 	struct sockaddr	*sa;
-	u_char *ptr;
-	int i = 0;
-
+	unsigned int a = 0, b = 0;
+	// Create memory for the list.
+	Interface *list = NULL;
+	// Use crazy code to loop through the interfaces
 	for (ifihead = ifi = Get_ifi_info_plus(AF_INET, 1); ifi != NULL; ifi = ifi->ifi_next) {
-		printf("%s: ", ifi->ifi_name);
-		if (ifi->ifi_index != 0)
-			printf("(%d) ", ifi->ifi_index);
+		// Create node
+		Interface *node = malloc(sizeof(Interface));
+		// Figure out where to place the node
+		if(list == NULL) {
+			list = node;	
+		} else {
+			// Just push it down the list
+			// IE: It goes in reverse discovery order
+			node->next = list;
+			list->prev = node;
+			list = node;
+		}
+		// Determine the type of socket
 		printf("<");
 		if (ifi->ifi_flags & IFF_UP)			printf("UP ");
 		if (ifi->ifi_flags & IFF_BROADCAST)		printf("BCAST ");
 		if (ifi->ifi_flags & IFF_MULTICAST)		printf("MCAST ");
 		if (ifi->ifi_flags & IFF_LOOPBACK)		printf("LOOP ");
 		if (ifi->ifi_flags & IFF_POINTOPOINT)	printf("P2P ");
-		printf(">\n");
-		if ( (i = ifi->ifi_hlen) > 0) {
-			ptr = ifi->ifi_haddr;
-			do {
-				printf("%s%x", (i == ifi->ifi_hlen) ? "  " : ":", *ptr++);
-			} while (--i > 0);
-			printf("\n");
+		printf("\b>\n");
+		// TODO: Determine if this is a unicast interface
+		// Copy the name of the interface
+		strcpy(node->name, ifi->ifi_name); 
+		// Copy the IPAddress
+		if((sa = ifi->ifi_addr) != NULL) {
+			strcpy(node->ip_address, Sock_ntop_host(sa, sizeof(*sa)));
+			a = convertIp(node->ip_address);
 		}
-		if (ifi->ifi_mtu != 0)
-			printf("  MTU: %d\n", ifi->ifi_mtu);
-
-		if ( (sa = ifi->ifi_addr) != NULL)
-			printf("  IP addr: %s\n",
-						Sock_ntop_host(sa, sizeof(*sa)));
-		if ( (sa = ifi->ifi_ntmaddr) != NULL)
-			printf("  network mask: %s\n",
-						Sock_ntop_host(sa, sizeof(*sa)));
-		if ( (sa = ifi->ifi_brdaddr) != NULL)
-			printf("  broadcast addr: %s\n",
-						Sock_ntop_host(sa, sizeof(*sa)));
-		if ( (sa = ifi->ifi_dstaddr) != NULL)
-			printf("  destination addr: %s\n",
-						Sock_ntop_host(sa, sizeof(*sa)));
+		// Copy the network mask
+		if((sa = ifi->ifi_ntmaddr) != NULL) {
+			strcpy(node->network_mask, Sock_ntop_host(sa, sizeof(*sa)));
+			b = convertIp(node->network_mask);
+		}
+		// Figure out the subnet mask
+		if(a && b) {
+			struct in_addr ip_addr;
+			unsigned int subnet = a & b;
+			ip_addr.s_addr = subnet;
+			strcpy(node->subnet_address, inet_ntoa(ip_addr));
+		}
+		// Print out info
+		#ifdef DEBUG
+			printf("<%s>\nIP: %s\nMask: %s\nSubnet: %s\n\n", node->name, 
+				node->ip_address, node->network_mask, node->subnet_address);
+		#endif
 	}
 	free_ifi_info_plus(ifihead);
+	return list;
 }
