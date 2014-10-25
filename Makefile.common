@@ -4,7 +4,7 @@ CC = gcc
 # Set the C flags to be used by the compiler
 CFLAGS = -g -Wall -Werror -std=gnu89
 IINC = -Iinclude
-LIBS = -lm
+LIBS = -lm -lpthread
 
 # Attempt to figure out what system we are on
 UNAME = $(shell uname)

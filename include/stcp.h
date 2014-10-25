@@ -36,7 +36,7 @@ struct stcp_hdr {
 struct stcp_pkt {
 	struct stcp_hdr hdr;		/* Segment header	*/
 	char data[STCP_MAX_DATA];	/* Segment data		*/
-	uint32_t dlen;				/* Length of data */
+	int dlen;				/* Length of data */
 };
 /* convert packet from/to host order */
 void hton_hdr(struct stcp_hdr *hdr);
@@ -111,5 +111,24 @@ int stcp_close(struct stcp_sock *sock);
  * @return 0 on successful connection or -1 on error.
  */
 int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *file);
+
+/**
+ * Wrappers for send functions.
+ *
+ * @param pkt Must be in host order with the pkt->dlen set
+ * @return Total # bytes sent, -1 on error check errno
+ */
+int send_pkt(int sockfd, struct stcp_pkt *pkt, int flags);
+int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
+        struct sockaddr *dest_addr, socklen_t addrlen);
+/**
+* Wrappers for recv functions.
+*
+* @param pkt Will be returned in host order
+* @return Total # bytes read, -1 on error check errno
+*/
+int recv_pkt(int sockfd, struct stcp_pkt *pkt, int flags);
+int recvfrom_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
+        struct sockaddr *src_addr, socklen_t *addrlen);
 
 #endif

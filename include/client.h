@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <math.h>
+#include <pthread.h>
 // system headers
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -15,6 +16,12 @@
 #include "stcp.h"
 #include "utility.h"
 #include "debug.h"
+
+struct consumer_args {
+    struct stcp_sock *stcp;
+    unsigned int seed;
+    unsigned int mean;
+};
 
 /**
  * Determine the IP to identify the server and the IP to identify the client.
@@ -36,9 +43,11 @@ bool chooseIPs(Config *config, struct in_addr *server_ip, struct in_addr *client
 int runProducer(struct stcp_sock *sock);
 
 /**
- * Start consumer behavior
+ * Start consumer behavior, this is the start routine in a pthread
+ *
+ * @param args A struct containing the seed, mean, and reference to stcp struct
  */
-int runConsumer(struct stcp_sock *sock, unsigned int seed, unsigned int mean);
+void *runConsumer(void *args);
 
 /**
 * Return a sleep time by sampling from a uniform dist. RNG with mean
