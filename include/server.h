@@ -13,6 +13,7 @@
 #include "utility.h"
 #include "stcp.h"
 #include "interfaces.h"
+#include "child_process.h"
 #include "unpifiplus.h"
 #include "debug.h"
 

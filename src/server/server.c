@@ -11,7 +11,7 @@ int main(int argc, char *argv[]) {
 		debug("Port: %u\n", config.port);
 		debug("Window Size: %u\n", config.win_size);
 		// Get a list interfaces
-		interfaces = discoverInterfaces(&config);
+		interfaces = discoverInterfaces();
 		// Get the head
 		node = interfaces;
 		/* Config was successfully parsed; attempt to bind sockets */
@@ -43,19 +43,17 @@ int main(int argc, char *argv[]) {
 void run(Interface *interfaces, Config *config) {
 	fd_set rset;
 	Interface *node;
+	// Process *processes = NULL;
 	int largest_fd = 0;
 	bool running = true;
+	char buffer[SERVER_BUFFER_SIZE];
+
+	// Packet stuff that should probably be in child.
 	int recv_length = 0;
-	unsigned char buffer[SERVER_BUFFER_SIZE];
+	struct stcp_pkt pkt;
 	struct sockaddr_in connection_addr;
-	socklen_t connection_len = sizeof(connection_addr);
-    struct stcp_pkt pkt;
-    pkt.hdr.seq = htonl(0);
-    pkt.hdr.ack = htonl(1);
-    pkt.hdr.win = htons(config->win_size);
-    pkt.hdr.flags = htons(STCP_SYN | STCP_ACK);
-    strcpy(pkt.data, "5656");
-    pkt.dlen = 4;
+    socklen_t connection_len = sizeof(connection_addr);
+
 
 	debug("Server waiting on port %u\n", config->port);
 	while(running) {
@@ -75,30 +73,35 @@ void run(Interface *interfaces, Config *config) {
 		while(node != NULL) {
 			if(FD_ISSET(node->sockfd, &rset)) {
 				// START HERE: Check for same subnet, fork child, create new out of band socket, etc.
-				debug("Connection on interface %s detected\n", node->name);
-				recv_length = recvfrom(node->sockfd, buffer, SERVER_BUFFER_SIZE, 0, (struct sockaddr *)&connection_addr, &connection_len);
+				debug("Detected connection on interface: <%s> %s\n", node->name, node->ip_address);
+				recv_length = recvfrom_pkt(node->sockfd, &pkt, 0, (struct sockaddr *)&connection_addr, &connection_len);
+				// Calculate the subnet
+				inet_ntop(AF_INET, &(connection_addr.sin_addr), buffer, INET_ADDRSTRLEN);
+				if(isSameSubnet(node->ip_address, buffer, node->network_mask)) {
+					debug("Both nodes are on the subnet: %s\n", node->subnet_address);
+				} else {
+					debug("Nodes are not on the same subnet\n");
+				}
+				
 				printf("received %d bytes\n", recv_length);
-				if (recv_length > 0) {
-					buffer[recv_length] = '\0';
-					printf("received message: '%s'\n", buffer);
+				print_hdr(&pkt.hdr);
+
+				pkt.hdr.ack = pkt.hdr.seq + 1; 
+				pkt.hdr.seq = 0;
+				pkt.hdr.win = config->win_size;
+				pkt.hdr.flags = STCP_ACK | STCP_SYN;
+				pkt.dlen = 0;
+
+				printf("Sending packet header: ");
+				print_hdr(&pkt.hdr);
+
+				recv_length = sendto_pkt(node->sockfd, &pkt, 0, (struct sockaddr *)&connection_addr, connection_len);
+				if(recv_length < 0) {
+					perror("");
+					warn("Failed to send pkt\n");
 				}
 			}
 			node = node->next;
 		}
-
-		/*
-		recv_length = recvfrom(server_fd, buffer, SERVER_BUFFER_SIZE, 0, (struct sockaddr *)&connection_addr, &connection_len);
-		printf("received %d bytes\n", recv_length);
-		if (recv_length > 0) {
-				buffer[recv_length] = '\0';
-				printf("received message: '%s'\n", buffer);
-				
-				if(sendto(server_fd, &pkt, sizeof(pkt) + pkt.dlen, 0,
-						(struct sockaddr *)&connection_addr, connection_len) < 0) {
-					perror("run: sendto");
-					break;
-				}
-		}
-		*/
 	}
 }

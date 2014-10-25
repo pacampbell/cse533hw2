@@ -3,6 +3,7 @@
 #define INTERFACES_BUFFER 256
 #include <stdlib.h>
 #include <stdbool.h>
+#include <arpa/inet.h>
 #include "utility.h"
 #include "debug.h"
 #include "unpifiplus.h"
@@ -39,9 +40,17 @@ bool remove_node(Interface **list, Interface *node);
 
 /**
  * Discovers unicast interfaces on the system.
- * @param config Contains configuration info from file.
  * @return Returns all the unicast interfaces on the system.
  */
-Interface*  discoverInterfaces(Config *config);
+Interface*  discoverInterfaces();
+
+/**
+ * Checks to see if two ipaddresses are part of the same subnet.
+ * @param server_ip Ipaddress of the server.
+ * @param client_ip Ipaddress of the client.
+ * @param network_mask Network mask to perform the operation with.
+ * @return Returns true if the same subnet, else false.
+ */
+bool isSameSubnet(const char *server_ip, const char *client_ip, const char *network_mask);
 
 #endif
