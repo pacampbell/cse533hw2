@@ -78,4 +78,12 @@ int createClientSocket(struct sockaddr_in *serv_addr,
 */
 int udpConnect(int sockfd, struct sockaddr_in *peer);
 
+/**
+ * Converts a string containing an ipaddress to an 
+ * unsigned int.
+ * @param ipaddress String containing an ipaddress.
+ * @return Returns the ipaddress as an unsigned int.
+ */
+unsigned int convertIp(char *ipaddress);
+
 #endif

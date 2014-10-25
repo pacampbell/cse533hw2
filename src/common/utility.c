@@ -181,3 +181,18 @@ int udpConnect(int sockfd, struct sockaddr_in *peer) {
             inet_ntoa(peer->sin_addr), ntohs(peer->sin_port));
     return 0;
 }
+
+unsigned int convertIp(char *ipaddress) {
+	unsigned int address = 0;
+	if(ipaddress != NULL) {
+		unsigned int a = 0, b = 0, c = 0, d = 0;
+		// Use scanf to split the string up
+		sscanf(ipaddress, "%u.%u.%u.%u", &a, &b, &c, &d);
+		// Shift the bits into place
+		address = (address | a) << 8;
+		address = (address | b) << 8;
+		address = (address | c) << 8;
+		address = (address | d);
+	}
+	return address;
+}
