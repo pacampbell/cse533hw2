@@ -173,3 +173,42 @@ void print_hdr(struct stcp_hdr *hdr) {
     printf("stcp_hdr{seq:%u, ack:%u, win:%hu, flags:%hu}\n",
             hdr->seq, hdr->ack, hdr->win, hdr->flags);
 }
+
+int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
+        struct sockaddr *dest_addr, socklen_t addrlen) {
+    int rv;
+    /* convert stcp_hdr into network order */
+    hton_hdr(&pkt->hdr);
+    rv = sendto(sockfd, pkt, sizeof(struct stcp_hdr) + pkt->dlen, flags,
+                dest_addr, addrlen);
+    return rv;
+}
+
+int send_pkt(int sockfd, struct stcp_pkt *pkt, int flags) {
+    int rv;
+    /* convert stcp_hdr into network order */
+    hton_hdr(&pkt->hdr);
+    rv = send(sockfd, pkt, sizeof(struct stcp_hdr) + pkt->dlen, flags);
+    return rv;
+}
+
+int recvfrom_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
+        struct sockaddr *src_addr, socklen_t *addrlen) {
+    int rv;
+    rv = recvfrom(sockfd, pkt, STCP_MAX_SEG, flags, src_addr, addrlen);
+    /* convert stcp_hdr into host order */
+    ntoh_hdr(&pkt->hdr);
+    /* set data length */
+    pkt->dlen = rv - sizeof(struct stcp_hdr);
+    return rv;
+}
+
+int recv_pkt(int sockfd, struct stcp_pkt *pkt, int flags) {
+    int rv;
+    rv = recv(sockfd, pkt, STCP_MAX_SEG, flags);
+    /* convert stcp_hdr into host order */
+    ntoh_hdr(&pkt->hdr);
+    /* set data length */
+    pkt->dlen = rv - sizeof(struct stcp_hdr);
+    return rv;
+}

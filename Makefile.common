@@ -4,6 +4,7 @@ CC = gcc
 # Set the C flags to be used by the compiler
 CFLAGS = -g -Wall -Werror -std=gnu89
 IINC = -Iinclude
+LIBS = -lm -lpthread
 
 # Attempt to figure out what system we are on
 UNAME = $(shell uname)
@@ -11,12 +12,12 @@ UNAME = $(shell uname)
 # Set libs used based on OS
 ifeq ($(UNAME), Linux)
 	# export CSE533_STEVENS_LIB=/path/to/libunp.a
-	LIBS = $(shell echo $(CSE533_STEVENS_LIB))
+	LIBS += $(shell echo $(CSE533_STEVENS_LIB))
 	# export CSE533_STEVENS_INCLUDE=/path/to/unpv13e/lib
 	IINC += -I$(shell echo $(CSE533_STEVENS_INCLUDE))
 endif
 ifeq ($(UNAME), SunOS)
-	LIBS = /home/courses/cse533/Stevens/unpv13e_solaris2.10/libunp.a -lsocket -lnsl -lresolv 
+	LIBS += /home/courses/cse533/Stevens/unpv13e_solaris2.10/libunp.a -lsocket -lnsl -lresolv
 	IINC += -I/home/courses/cse533/Stevens/unpv13e_solaris2.10/lib
 endif
 

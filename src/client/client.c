@@ -1,14 +1,22 @@
 #include "client.h"
 
 int main(int argc, char *argv[]) {
-	debug("Client dummy program: %s\n", argv[0]);
-
-	int fd;
+	int fd, rv;
 	char *path = "client.in";
 	Config config;
 	struct sockaddr_in serv_addr, client_addr;
 	struct stcp_sock stcp;
 	bool local;
+    /* pthread variables */
+    struct consumer_args args;
+    pthread_t ptid;
+    pthread_attr_t pattr;
+    // Init pthread attributes
+    if((rv = pthread_attr_init(&pattr))) {
+        errno = rv;
+        perror("main: pthread_attr_init");
+        exit(EXIT_FAILURE);
+    }
 
 	/* Zero out the structs */
 	memset(&serv_addr, 0, sizeof(serv_addr));
@@ -43,24 +51,45 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr, "stcp_socket failed\n");
 		exit(EXIT_FAILURE);
 	}
-	/* Try to establish a connection to the server */
-	if(stcp_connect(&stcp, &serv_addr, config.filename) < 0) {
-		/* Unable to connect to server  */
-		fprintf(stderr, "Handshake failed with server @ %s port %hu\n",
+    /* Try to establish a connection to the server */
+    if(stcp_connect(&stcp, &serv_addr, config.filename) < 0) {
+        /* Unable to connect to server  */
+        fprintf(stderr, "Handshake failed with server @ %s port %hu\n",
 			inet_ntoa(config.serv_addr), config.port);
-		goto stcp_failure;
-	}
+        goto stcp_failure;
+    }
     printf("Connection established. Starting producer and consumer threads.");
-	/* Start the producer and consumer threads  */
-	/* Both threads use the same stcp structure */
-
-	/* close the STCP socket */
-	if(stcp_close(&stcp) < 0) {
-		perror("main: stcp_close");
-		exit(EXIT_FAILURE);
-	}
-	return EXIT_SUCCESS;
-stcp_failure:
+    /* Start the consumer thread */
+    /* Both threads use the same stcp structure */
+    args.stcp = &stcp;
+    args.seed = config.seed;
+    args.mean = config.mean;
+    pthread_create(&ptid, &pattr, runConsumer, &args);
+    /* Start Producing  */
+    if(runProducer(&stcp) < 0) {
+        fprintf(stderr, "runProducer failed!");
+        goto stcp_failure;
+    }
+    /* wait for the consumer to finish reading all the data */
+    /* NULL so dont recv exit status */
+    if((rv = pthread_join(ptid, NULL)) < 0) {
+        errno = rv;
+        perror("main: pthread_join");
+        goto stcp_failure;
+    }
+    printf("Consumer thread joined");
+    /* close the STCP socket */
+    if(stcp_close(&stcp) < 0) {
+        perror("main: stcp_close");
+        exit(EXIT_FAILURE);
+    }
+    /* destroy pthread attributes */
+    if(pthread_attr_destroy(&pattr)) {
+        perror("main: pthread_attr_destroy");
+        exit(EXIT_FAILURE);
+    }
+    return EXIT_SUCCESS;
+    stcp_failure:
 	/* close the STCP socket */
 	if(stcp_close(&stcp) < 0) {
 		perror("main: stcp_close");
@@ -87,11 +116,31 @@ bool chooseIPs(Config *config, struct in_addr *server_ip,
 	return local;
 }
 
-int runProducer(struct stcp_sock *sock) {
+int runProducer(struct stcp_sock *stcp) {
     return 0;
 }
 
 
-int runConsumer(struct stcp_sock *sock, unsigned int seed, double loss, unsigned int mean) {
+void *runConsumer(void *arg) {
+    struct consumer_args *args = arg;
+  //  struct stcp_sock *stcp = args->stcp;
+    unsigned int ms;
+    /* set the seed for our uniform uniformly distributed RNG */
+    srand48(args->seed);
+    while(1) {
+        ms = sampleExpDist(args->mean);
+        debug("Consumer: sleeping for %u ms\n", ms);
+        if(usleep(ms * 1000) < 0) {
+            perror("runConsumer: usleep");
+        }
+        /* Wake up and read from buffer */
+    }
 	return 0;
+}
+
+
+unsigned int sampleExpDist(unsigned int mean) {
+    unsigned int usecs;
+    usecs = mean * (-1 * log(drand48()));
+    return usecs;
 }
