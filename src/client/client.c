@@ -117,6 +117,30 @@ bool chooseIPs(Config *config, struct in_addr *server_ip,
 }
 
 int runProducer(struct stcp_sock *stcp) {
+    /* select stuff */
+    struct timeval tv;
+    int nfds;
+    fd_set rset;
+
+    /* Set the timeout */
+    while(1) {
+        tv.tv_sec = 1;
+        tv.tv_usec = 0;
+        FD_ZERO(&rset);
+        FD_SET(stcp->sockfd, &rset);
+        nfds = stcp->sockfd + 1;
+        if (select(nfds, &rset, NULL, NULL, &tv) < 0) {
+            perror("stcp_connect: select");
+            return -1;
+        }
+        if (FD_ISSET(stcp->sockfd, &rset)) {
+            printf("Must call recv_send_ack.\n");
+            /* if is FIN, send ACK and break */
+        } else {
+            /* timeout reached on select */
+            printf("Producer select timeout.\n");
+        }
+    }
     return 0;
 }
 
