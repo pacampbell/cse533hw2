@@ -5,7 +5,6 @@ int main(int argc, char *argv[]) {
 	Config config;
 	int server_fd = 0;
 	debug("Begin parsing %s\n", path);
-	Interface test = {.name = "Test", .ip_address = "154.132.4.19"};
 	/* Attempt to parse the config */
 	if(parseServerConfig(path, &config)) {
 		Interface *interfaces = NULL, *node = NULL;
@@ -13,7 +12,6 @@ int main(int argc, char *argv[]) {
 		debug("Window Size: %u\n", config.win_size);
 		// Get a list interfaces
 		interfaces = discoverInterfaces(&config);
-		remove_node(&interfaces, &test);
 		// Get the head
 		node = interfaces;
 		/* Config was successfully parsed; attempt to bind sockets */
