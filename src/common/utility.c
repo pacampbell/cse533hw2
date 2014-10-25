@@ -106,10 +106,12 @@ int createServer(char *address, unsigned int port) {
 	memset((char *)&addr, 0, sizeof(addr));
 	// Set fields
 	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = htonl(convertIp(address));
+	inet_aton(address, &addr.sin_addr);
 	addr.sin_port = htons(port);
 	// Attempt to bind socket
 	if(bind(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+		error("Failed to bind: %s:%d\n", address, port);
+		fd = SERVER_SOCKET_BIND_FAIL;
 		goto finished;
 	}
 finished:
