@@ -3,8 +3,8 @@
 static void _destroy_interfaces(Interface *node) {
 	if(node != NULL) {
 		_destroy_interfaces(node->next);
+		free(node);
 	}
-	free(node);
 }
 
 void destroy_interfaces(Interface **list) {
@@ -59,7 +59,7 @@ finished:
 	return success;
 }
 
-Interface* discoverInterfaces(Config *config) {
+Interface* discoverInterfaces() {
 	struct ifi_info	*ifi, *ifihead;
 	struct sockaddr	*sa;
 	unsigned int a = 0, b = 0;
@@ -115,4 +115,27 @@ Interface* discoverInterfaces(Config *config) {
 	}
 	free_ifi_info_plus(ifihead);
 	return list;
+}
+
+bool isSameSubnet(const char *server_ip, const char *client_ip, const char *network_mask) {
+	bool same = false;
+	if(server_ip != NULL && client_ip != NULL && network_mask != NULL) {
+		struct sockaddr_in server_sockaddr, client_sockaddr, mask_sockaddr;
+		unsigned int server_mask = 0, client_mask = 0;
+		// Convert the string to sockaddr_in
+		inet_pton(AF_INET, server_ip, &server_sockaddr);
+		inet_pton(AF_INET, client_ip, &client_sockaddr);
+		inet_pton(AF_INET, network_mask, &mask_sockaddr);
+		// Mask the addresses 
+		server_mask = server_sockaddr.sin_addr.s_addr & mask_sockaddr.sin_addr.s_addr;
+		client_mask = client_sockaddr.sin_addr.s_addr & mask_sockaddr.sin_addr.s_addr;
+		// Determine if they are the same
+		same = server_mask == client_mask;
+	} else {
+		error("NULL value passed in.\n server_ip = %s\nclient_ip = %s\nnetwork_mask = %s\n",
+			server_ip == NULL ? "NULL" : server_ip,
+			client_ip == NULL ? "NULL" : client_ip,
+			network_mask == NULL ? "NULL" : network_mask);
+	}
+	return same; 
 }
