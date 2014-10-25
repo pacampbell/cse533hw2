@@ -22,7 +22,7 @@
 /* STCP structs */
 /* Header */
 struct stcp_hdr {
-	uint32_t syn;		/* Sequence Number */
+	uint32_t seq;		/* Sequence Number */
 	uint32_t ack;		/* Acknowledgment Number */
 	uint16_t win;		/* Window size (in datagram units) */
 	uint16_t flags;		/* Flags */
@@ -61,7 +61,7 @@ struct stcp_seg {
 struct stcp_rwin {
 	struct stcp_seg *cbuf;	/* (contiguous) circular window buffer 	*/
 	uint16_t size;			/* length of receive window (#stcp_seg allocated)*/
-	uint32_t next_syn;		/* Sequence Number we expect to write next */
+	uint32_t next_seq;		/* Sequence Number we expect to write next */
 	uint16_t write_head;	/* Index of the free entry to write
 								the next SYN segment 				*/
 	uint16_t read_head;		/* Index of the first unread entry		*/

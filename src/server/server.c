@@ -49,7 +49,7 @@ void run(Interface *interfaces, Config *config) {
 	// struct sockaddr_in connection_addr;
 	// socklen_t connection_len = sizeof(connection_addr);
     struct stcp_pkt pkt;
-    pkt.hdr.syn = htonl(0);
+    pkt.hdr.seq = htonl(0);
     pkt.hdr.ack = htonl(1);
     pkt.hdr.win = htons(config->win_size);
     pkt.hdr.flags = htons(STCP_SYN | STCP_ACK);

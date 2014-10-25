@@ -29,8 +29,14 @@
  */
 bool chooseIPs(Config *config, struct in_addr *server_ip, struct in_addr *client_ip);
 
-int handshake(Config *config, int sockfd);
+/**
+ * Start producer behavior
+ */
+int runProducer(struct stcp_sock *sock);
 
-int run(int conn_fd, Config *config);
+/**
+* Start consumer behavior
+*/
+int runConsumer(struct stcp_sock *sock, unsigned int seed, double loss, unsigned int mean);
 
 #endif

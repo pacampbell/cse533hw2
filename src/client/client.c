@@ -50,6 +50,7 @@ int main(int argc, char *argv[]) {
 			inet_ntoa(config.serv_addr), config.port);
 		goto stcp_failure;
 	}
+    printf("Connection established. Starting producer and consumer threads.");
 	/* Start the producer and consumer threads  */
 	/* Both threads use the same stcp structure */
 
@@ -58,16 +59,6 @@ int main(int argc, char *argv[]) {
 		perror("main: stcp_close");
 		exit(EXIT_FAILURE);
 	}
-	// /* Config was successfully parsed; attempt to connect to server */
-	// if((fd = handshake(&config, fd)) >= 0) {
-	// 	/* Start the client producer/consumer threads */
-	// 	run(fd, &config);
-	// } else {
-	// 	/* Unable to connect to server  */
-	// 	fprintf(stderr, "handshake failed with server @ %s port %hu\n",
-	// 		inet_ntoa(config.serv_addr), config.port);
-	// }
-
 	return EXIT_SUCCESS;
 stcp_failure:
 	/* close the STCP socket */
@@ -96,28 +87,11 @@ bool chooseIPs(Config *config, struct in_addr *server_ip,
 	return local;
 }
 
-/**
- * The client sends a datagram to the server giving the filename for the transfer.
- * This send needs to be backed up by a timeout in case the datagram is lost.
- *
- * 1. Send filename to server
- * 2. Listen for port (timeout resend file)
- * 3. Connect to port
- * 4. Send ACK to server (timeout)
- *
- */
-int handshake(Config *config, int fd) {
-	char *my_message = "this is a test message";
-
-	/* send a message to the server */
-	if (send(fd, my_message, strlen(my_message), 0) < 0) {
-		perror("sendto failed");
-		return 0;
-	}
-
-	return -1;
+int runProducer(struct stcp_sock *sock) {
+    return 0;
 }
 
-int run(int conn_fd, Config *config) {
+
+int runConsumer(struct stcp_sock *sock, unsigned int seed, double loss, unsigned int mean) {
 	return 0;
 }

@@ -54,7 +54,7 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 	fd_set rset;
 
 	/* init first SYN */
-    sent_pkt.hdr.syn = htonl(0);
+    sent_pkt.hdr.seq = htonl(0);
     sent_pkt.hdr.win = htons(sock->rwin.size);
     sent_pkt.hdr.flags = htons(STCP_SYN);
 	/* Copy file to pkt data */
@@ -98,7 +98,7 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
             printf("Recv'd packet: ");
             print_hdr(&recv_pkt.hdr);
             if(recv_pkt.hdr.flags & STCP_ACK && recv_pkt.hdr.flags & STCP_SYN) {
-                if(recv_pkt.hdr.ack == sent_pkt.hdr.syn + 1) {
+                if(recv_pkt.hdr.ack == sent_pkt.hdr.seq + 1) {
                     newport = atoi(recv_pkt.data);
                     printf("New port received: %hu\n", newport);
                     /* break out out the loop */
@@ -126,8 +126,8 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
         return -1;
     }
 	/* Send ACK */
-    ack_pkt.hdr.syn = 0;
-    ack_pkt.hdr.ack = recv_pkt.hdr.syn + 1;
+    ack_pkt.hdr.seq = 0;
+    ack_pkt.hdr.ack = recv_pkt.hdr.seq + 1;
     /* initial receiving window size */
     ack_pkt.hdr.win = sock->rwin.size;
     ack_pkt.hdr.flags = STCP_ACK;
@@ -146,26 +146,30 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 	return 0;
 }
 
-
-int stcp_recv_send(struct stcp_sock *sock) {
+/**
+ * Attempt to recv an STCP packet P and send an appropriate ACK.
+ * 1. If seq < expected next SEQ, discard P and send ACK
+ * 2. If seq == expected
+ */
+int stcp_recv_ack(struct stcp_sock *sock) {
     return -1;
 }
 
 void hton_hdr(struct stcp_hdr *hdr) {
-    hdr->syn = htonl(hdr->syn);
+    hdr->seq = htonl(hdr->seq);
     hdr->ack = htonl(hdr->ack);
     hdr->win = htons(hdr->win);
     hdr->flags = htons(hdr->flags);
 }
 
 void ntoh_hdr(struct stcp_hdr *hdr) {
-    hdr->syn = ntohl(hdr->syn);
+    hdr->seq = ntohl(hdr->seq);
     hdr->ack = ntohl(hdr->ack);
     hdr->win = ntohs(hdr->win);
     hdr->flags = ntohs(hdr->flags);
 }
 
 void print_hdr(struct stcp_hdr *hdr) {
-    printf("stcp_hdr{syn:%u, ack:%u, win:%hu, flags:%hu}\n",
-            hdr->syn, hdr->ack, hdr->win, hdr->flags);
+    printf("stcp_hdr{seq:%u, ack:%u, win:%hu, flags:%hu}\n",
+            hdr->seq, hdr->ack, hdr->win, hdr->flags);
 }
