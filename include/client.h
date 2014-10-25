@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <math.h>
 // system headers
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -35,8 +36,17 @@ bool chooseIPs(Config *config, struct in_addr *server_ip, struct in_addr *client
 int runProducer(struct stcp_sock *sock);
 
 /**
-* Start consumer behavior
+ * Start consumer behavior
+ */
+int runConsumer(struct stcp_sock *sock, unsigned int seed, unsigned int mean);
+
+/**
+* Return a sleep time by sampling from a uniform dist. RNG with mean
+* using drand48
+*
+* @param mean The mean of the uniform distribution
+* @return A time in milliseconds to sleep
 */
-int runConsumer(struct stcp_sock *sock, unsigned int seed, double loss, unsigned int mean);
+unsigned int sampleExpDist(unsigned int mean);
 
 #endif

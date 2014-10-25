@@ -43,24 +43,24 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr, "stcp_socket failed\n");
 		exit(EXIT_FAILURE);
 	}
-	/* Try to establish a connection to the server */
-	if(stcp_connect(&stcp, &serv_addr, config.filename) < 0) {
-		/* Unable to connect to server  */
-		fprintf(stderr, "Handshake failed with server @ %s port %hu\n",
+    /* Try to establish a connection to the server */
+    if(stcp_connect(&stcp, &serv_addr, config.filename) < 0) {
+        /* Unable to connect to server  */
+        fprintf(stderr, "Handshake failed with server @ %s port %hu\n",
 			inet_ntoa(config.serv_addr), config.port);
-		goto stcp_failure;
-	}
+        goto stcp_failure;
+    }
     printf("Connection established. Starting producer and consumer threads.");
-	/* Start the producer and consumer threads  */
-	/* Both threads use the same stcp structure */
-
-	/* close the STCP socket */
-	if(stcp_close(&stcp) < 0) {
-		perror("main: stcp_close");
-		exit(EXIT_FAILURE);
-	}
-	return EXIT_SUCCESS;
-stcp_failure:
+    /* Start the producer and consumer threads  */
+    /* Both threads use the same stcp structure */
+    runConsumer(&stcp, config.seed, config.mean);
+    /* close the STCP socket */
+    if(stcp_close(&stcp) < 0) {
+        perror("main: stcp_close");
+        exit(EXIT_FAILURE);
+    }
+    return EXIT_SUCCESS;
+    stcp_failure:
 	/* close the STCP socket */
 	if(stcp_close(&stcp) < 0) {
 		perror("main: stcp_close");
@@ -92,6 +92,24 @@ int runProducer(struct stcp_sock *sock) {
 }
 
 
-int runConsumer(struct stcp_sock *sock, unsigned int seed, double loss, unsigned int mean) {
+int runConsumer(struct stcp_sock *sock, unsigned int seed, unsigned int mean) {
+    unsigned int ms;
+    /* set the seed for our uniform uniformly distributed RNG */
+    srand48(seed);
+    while(1) {
+        ms = sampleExpDist(mean);
+        debug("Consumer: sleeping for %u ms\n", ms);
+        if(usleep(ms * 1000) < 0) {
+            perror("runConsumer: usleep");
+        }
+        /* Wake up and read from buffer */
+    }
 	return 0;
+}
+
+
+unsigned int sampleExpDist(unsigned int mean) {
+    unsigned int usecs;
+    usecs = mean * (-1 * log(drand48()));
+    return usecs;
 }
