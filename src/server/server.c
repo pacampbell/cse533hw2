@@ -43,8 +43,10 @@ int main(int argc, char *argv[]) {
 void run(Interface *interfaces, Config *config) {
 	fd_set rset;
 	Interface *node;
+	Process *processes = NULL;
 	int largest_fd = 0;
 	bool running = true;
+	
 	int recv_length = 0;
 	unsigned char buffer[SERVER_BUFFER_SIZE];
 	struct sockaddr_in connection_addr;
@@ -75,30 +77,26 @@ void run(Interface *interfaces, Config *config) {
 		while(node != NULL) {
 			if(FD_ISSET(node->sockfd, &rset)) {
 				// START HERE: Check for same subnet, fork child, create new out of band socket, etc.
-				debug("Connection on interface %s detected\n", node->name);
+				debug("Detected connection on interface: <%s> %s\n", node->name, node->ip_address);
 				recv_length = recvfrom(node->sockfd, buffer, SERVER_BUFFER_SIZE, 0, (struct sockaddr *)&connection_addr, &connection_len);
+				// Calculate the subnet
+				connection_addr.sin_addr.s_addr = convertIp(node->network_mask) & connection_addr.sin_addr.s_addr;
+				// Figure out if on same subnet
+				if(strcmp(node->subnet_address, inet_ntoa(connection_addr.sin_addr)) == 0) {
+					debug("Both nodes are on the subnet: %s\n", node->subnet_address);
+				} else {
+					// Not on the same subnet
+					debug("Nodes are not on the same subnet\n");
+				}
+
 				printf("received %d bytes\n", recv_length);
 				if (recv_length > 0) {
 					buffer[recv_length] = '\0';
-					printf("received message: '%s'\n", buffer);
+
+					printf("received message: '%s'\n", ((struct stcp_pkt*)buffer)->data);
 				}
 			}
 			node = node->next;
 		}
-
-		/*
-		recv_length = recvfrom(server_fd, buffer, SERVER_BUFFER_SIZE, 0, (struct sockaddr *)&connection_addr, &connection_len);
-		printf("received %d bytes\n", recv_length);
-		if (recv_length > 0) {
-				buffer[recv_length] = '\0';
-				printf("received message: '%s'\n", buffer);
-				
-				if(sendto(server_fd, &pkt, sizeof(pkt) + pkt.dlen, 0,
-						(struct sockaddr *)&connection_addr, connection_len) < 0) {
-					perror("run: sendto");
-					break;
-				}
-		}
-		*/
 	}
 }
