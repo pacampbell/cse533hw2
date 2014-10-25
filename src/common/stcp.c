@@ -46,7 +46,7 @@ int stcp_close(struct stcp_sock *sock){
 int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *file) {
 	int len;
 	uint16_t newport;
-	struct stcp_pkt sent_pkt, recv_pkt, ack_pkt;
+	struct stcp_pkt sent_pkt, reply_pkt, ack_pkt;
 	/* 1s timeout for connect + Select stuff */
 	int retries = 0, max_retries = 3, timeout = 1;
 	struct timeval tv = {1L, 0L};
@@ -54,9 +54,9 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 	fd_set rset;
 
 	/* init first SYN */
-    sent_pkt.hdr.seq = htonl(0);
-    sent_pkt.hdr.win = htons(sock->rwin.size);
-    sent_pkt.hdr.flags = htons(STCP_SYN);
+    sent_pkt.hdr.seq = 0;
+    sent_pkt.hdr.win = sock->rwin.size;
+    sent_pkt.hdr.flags = STCP_SYN;
 	/* Copy file to pkt data */
     sent_pkt.dlen = strlen(file);
 	if(sent_pkt.dlen > STCP_MAX_DATA) {
@@ -68,12 +68,14 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 	while (1) {
         printf("Sending connection request with %u second timeout\n", (uint32_t)tv.tv_sec);
 		/* send first SYN containing the filename in the data field */
-		len = send(sock->sockfd, &sent_pkt, sizeof(struct stcp_hdr) + sent_pkt.dlen, 0);
+        printf("SYN pkt:");
+        print_hdr(&sent_pkt.hdr);
+		len = send_pkt(sock->sockfd, &sent_pkt, 0);
 		if(len < 0) {
-			perror("stcp_connect: send");
+			perror("stcp_connect: send_pkt");
 			return -1;
 		} else if(len == 0) {
-			fprintf(stderr, "stcp_connect: send failed to write any data\n");
+			fprintf(stderr, "stcp_connect: send_pkt failed to write any data\n");
 			return -1;
 		}
 		FD_ZERO(&rset);
@@ -85,21 +87,20 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 		}
 		if(FD_ISSET(sock->sockfd, &rset)) {
 			/* Read response from server */
-			len = recv(sock->sockfd, &recv_pkt, STCP_MAX_SEG, 0);
+			len = recv_pkt(sock->sockfd, &reply_pkt, 0);
 			if(len < 0) {
-				perror("stcp_connect: recv");
+				perror("stcp_connect: recv_pkt");
 				return -1;
 			} else if(len == 0) {
-				fprintf(stderr, "stcp_connect: recv failed to read any data\n");
+				fprintf(stderr, "stcp_connect: recv_pkt failed to read any data\n");
 				return -1;
 			}
 			/* parse the new port from the server */
-            ntoh_hdr(&recv_pkt.hdr);
             printf("Recv'd packet: ");
-            print_hdr(&recv_pkt.hdr);
-            if(recv_pkt.hdr.flags & STCP_ACK && recv_pkt.hdr.flags & STCP_SYN) {
-                if(recv_pkt.hdr.ack == sent_pkt.hdr.seq + 1) {
-                    newport = atoi(recv_pkt.data);
+            print_hdr(&reply_pkt.hdr);
+            if(reply_pkt.hdr.flags & STCP_ACK && reply_pkt.hdr.flags & STCP_SYN) {
+                if(reply_pkt.hdr.ack == sent_pkt.hdr.seq + 1) {
+                    newport = atoi(reply_pkt.data);
                     printf("New port received: %hu\n", newport);
                     /* break out out the loop */
                     break;
@@ -128,26 +129,27 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
     }
 	/* Send ACK */
     ack_pkt.hdr.seq = 0;
-    ack_pkt.hdr.ack = recv_pkt.hdr.seq + 1;
+    ack_pkt.hdr.ack = reply_pkt.hdr.seq + 1;
     /* initial receiving window size */
     ack_pkt.hdr.win = sock->rwin.size;
     ack_pkt.hdr.flags = STCP_ACK;
+    ack_pkt.dlen = 0;
     printf("Sending ACK to server ");
     print_hdr(&ack_pkt.hdr);
-    /* convert to network order */
-    hton_hdr(&ack_pkt.hdr);
-    len = send(sock->sockfd, &ack_pkt.hdr, sizeof(struct stcp_hdr), 0);
+    /* Send ACK packet to server */
+    len = send_pkt(sock->sockfd, &ack_pkt, 0);
     if(len < 0) {
-        perror("stcp_connect: send");
+        perror("stcp_connect: send_pkt");
         return -1;
     } else if(len == 0) {
-        fprintf(stderr, "stcp_connect: send failed to write any data\n");
+        fprintf(stderr, "stcp_connect: send_pkt failed to write any data\n");
         return -1;
     }
 	return 0;
 }
 
 /**
+ * This should only be called when the underlying socket is readable.
  * Attempt to recv an STCP packet P and send an appropriate ACK.
  * 1. If seq < expected next SEQ, discard P and send ACK
  * 2. If seq == expected
@@ -182,6 +184,8 @@ int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
     hton_hdr(&pkt->hdr);
     rv = sendto(sockfd, pkt, sizeof(struct stcp_hdr) + pkt->dlen, flags,
                 dest_addr, addrlen);
+    /* convert stcp_hdr back into host order */
+    ntoh_hdr(&pkt->hdr);
     return rv;
 }
 
@@ -190,6 +194,8 @@ int send_pkt(int sockfd, struct stcp_pkt *pkt, int flags) {
     /* convert stcp_hdr into network order */
     hton_hdr(&pkt->hdr);
     rv = send(sockfd, pkt, sizeof(struct stcp_hdr) + pkt->dlen, flags);
+    /* convert stcp_hdr back into host order */
+    ntoh_hdr(&pkt->hdr);
     return rv;
 }
 
