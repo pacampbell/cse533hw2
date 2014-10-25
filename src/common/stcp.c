@@ -106,18 +106,19 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
                 }
             }
             printf("Malformed message SYN+ACK from server\n");
-		}
-		/* timeout reached! */
-		retries++;
-		/* double the timeout period */
-		timeout <<= 1;
-		/* Reset the timeout */
-		tv.tv_sec = timeout;
-		tv.tv_usec = 0L;
-        printf("Connect timeout! ");
-        if(retries > max_retries){
-            printf("Aborting connection attempt.\n");
-            return -1;
+		} else {
+            /* timeout reached! */
+            retries++;
+            /* double the timeout period */
+            timeout <<= 1;
+            /* Reset the timeout */
+            tv.tv_sec = timeout;
+            tv.tv_usec = 0L;
+            printf("Connect timeout! ");
+            if (retries > max_retries) {
+                printf("Aborting connection attempt.\n");
+                return -1;
+            }
         }
 	}
 	/* connect to new port */
