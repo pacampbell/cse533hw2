@@ -20,15 +20,17 @@
 
 /**
  * Starts the main loop of the server.
+ * @param interfaces List of network interfaces to use.
  * @param server_fd fd of the server socket.
  * @param config Config information passed in from file.
  */
-void run(int server_fd, Config *config);
+void run(Interface *interfaces, Config *config);
 
 /**
  * Discovers unicast interfaces on the system.
+ * @param config Contains configuration info from file.
  * @return Returns all the unicast interfaces on the system.
  */
-Interface*  discoverInterfaces();
+Interface*  discoverInterfaces(Config *config);
 
 #endif
