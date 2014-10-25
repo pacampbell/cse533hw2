@@ -15,6 +15,7 @@
 // Utility constants
 #define BUFFER_SIZE 256
 #define SERVER_SOCKET_BIND_FAIL -1
+
 // Utility structs
 typedef struct {
 	unsigned short port;
@@ -45,11 +46,12 @@ bool parseClientConfig(char *path, Config *config);
 
 /**
  * Binds a UDP socket to the provided port.
+ * @param address IPAddress to bind to.
  * @param port Port number to bind server socket to.
  * @return Returns the fd for the socket if creation was a success,
  * else SERVER_SOCKET_BIND_FAIL is returned.
  */
-int createServer(unsigned int port);
+int createServer(char *address, unsigned int port);
 
 /**
  * Creates a UDP socket, binds to client_addr, connects to serv_addr,

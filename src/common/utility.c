@@ -94,7 +94,7 @@ close:
 	return success;
 }
 
-int createServer(unsigned int port) {
+int createServer(char *address, unsigned int port) {
 	int fd = SERVER_SOCKET_BIND_FAIL;
 	/* This server address */
 	struct sockaddr_in addr;
@@ -106,7 +106,7 @@ int createServer(unsigned int port) {
 	memset((char *)&addr, 0, sizeof(addr));
 	// Set fields
 	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	addr.sin_addr.s_addr = htonl(convertIp(address));
 	addr.sin_port = htons(port);
 	// Attempt to bind socket
 	if(bind(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
