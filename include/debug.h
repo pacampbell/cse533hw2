@@ -14,8 +14,14 @@
 
 #ifdef DEBUG
 	#define debug(S, ...) do{fprintf(stderr, KBLU "DEBUG: %s:%d " S KNRM, __FILE__, __LINE__, ##__VA_ARGS__);} while(0)
+	#define error(S, ...) do{fprintf(stderr, KRED "ERROR: %s:%d " S KNRM, __FILE__, __LINE__, ##__VA_ARGS__);} while(0)
+	#define warn(S, ...) do{fprintf(stderr, KYEL "WARN: %s:%d " S KNRM, __FILE__, __LINE__, ##__VA_ARGS__);} while(0)
+	#define info(S, ...) do{fprintf(stderr, KCYN "INFO: %s:%d " S KNRM, __FILE__, __LINE__, ##__VA_ARGS__);} while(0)
 #else
 	#define debug(S, ...)
+	#define error(S, ...)
+	#define warn(S, ...)
+	#define info(S, ...)
 #endif
 
 #endif
