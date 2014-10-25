@@ -5,6 +5,7 @@ int main(int argc, char *argv[]) {
 	Config config;
 	int server_fd = 0;
 	debug("Begin parsing %s\n", path);
+	Interface test = {.name = "Test", .ip_address = "154.132.4.19"};
 	/* Attempt to parse the config */
 	if(parseServerConfig(path, &config)) {
 		Interface *interfaces = NULL, *node = NULL;
@@ -12,6 +13,7 @@ int main(int argc, char *argv[]) {
 		debug("Window Size: %u\n", config.win_size);
 		// Get a list interfaces
 		interfaces = discoverInterfaces(&config);
+		remove_node(&interfaces, &test);
 		// Get the head
 		node = interfaces;
 		/* Config was successfully parsed; attempt to bind sockets */
@@ -23,6 +25,7 @@ int main(int argc, char *argv[]) {
 				/* Unable to bind socket to port */
 				/* TODO: Remove interface from interfaces? */
 				fprintf(stderr, "Failed to bind socket: %s:%u\n", node->ip_address, config.port);
+				remove_node(&interfaces, node);
 			}
 			// Get next node
 			node = node->next;
@@ -44,10 +47,10 @@ void run(Interface *interfaces, Config *config) {
 	Interface *node;
 	int largest_fd = 0;
 	bool running = true;
-	// int recv_length = 0;
-	// unsigned char buffer[SERVER_BUFFER_SIZE];
-	// struct sockaddr_in connection_addr;
-	// socklen_t connection_len = sizeof(connection_addr);
+	int recv_length = 0;
+	unsigned char buffer[SERVER_BUFFER_SIZE];
+	struct sockaddr_in connection_addr;
+	socklen_t connection_len = sizeof(connection_addr);
     struct stcp_pkt pkt;
     pkt.hdr.syn = htonl(0);
     pkt.hdr.ack = htonl(1);
@@ -74,6 +77,13 @@ void run(Interface *interfaces, Config *config) {
 		while(node != NULL) {
 			if(FD_ISSET(node->sockfd, &rset)) {
 				// START HERE: Check for same subnet, fork child, create new out of band socket, etc.
+				debug("Connection on interface %s detected\n", node->name);
+				recv_length = recvfrom(node->sockfd, buffer, SERVER_BUFFER_SIZE, 0, (struct sockaddr *)&connection_addr, &connection_len);
+				printf("received %d bytes\n", recv_length);
+				if (recv_length > 0) {
+					buffer[recv_length] = '\0';
+					printf("received message: '%s'\n", buffer);
+				}
 			}
 			node = node->next;
 		}
@@ -93,61 +103,4 @@ void run(Interface *interfaces, Config *config) {
 		}
 		*/
 	}
-}
-
-Interface* discoverInterfaces(Config *config) {
-	struct ifi_info	*ifi, *ifihead;
-	struct sockaddr	*sa;
-	unsigned int a = 0, b = 0;
-	// Create memory for the list.
-	Interface *list = NULL;
-	// Use crazy code to loop through the interfaces
-	for (ifihead = ifi = Get_ifi_info_plus(AF_INET, 1); ifi != NULL; ifi = ifi->ifi_next) {
-		// Create node
-		Interface *node = malloc(sizeof(Interface));
-		// Figure out where to place the node
-		if(list == NULL) {
-			list = node;	
-		} else {
-			// Just push it down the list
-			// IE: It goes in reverse discovery order
-			node->next = list;
-			list->prev = node;
-			list = node;
-		}
-		// Copy the name of the interface
-		strcpy(node->name, ifi->ifi_name); 
-		// Copy the IPAddress
-		if((sa = ifi->ifi_addr) != NULL) {
-			strcpy(node->ip_address, Sock_ntop_host(sa, sizeof(*sa)));
-			a = convertIp(node->ip_address);
-		}
-		// Copy the network mask
-		if((sa = ifi->ifi_ntmaddr) != NULL) {
-			strcpy(node->network_mask, Sock_ntop_host(sa, sizeof(*sa)));
-			b = convertIp(node->network_mask);
-		}
-		// Figure out the subnet mask
-		if(a && b) {
-			struct in_addr ip_addr;
-			unsigned int subnet = a & b;
-			ip_addr.s_addr = subnet;
-			strcpy(node->subnet_address, inet_ntoa(ip_addr));
-		}
-		// Print out info
-		#ifdef DEBUG
-			printf("<%s> [%s%s%s%s%s\b] IP: %s Mask: %s Subnet: %s\n", 
-				node->name,
-				ifi->ifi_flags & IFF_UP ? "UP " : "",
-				ifi->ifi_flags & IFF_BROADCAST ? "BCAST " : "",
-				ifi->ifi_flags & IFF_MULTICAST ? "MCAST " : "",
-				ifi->ifi_flags & IFF_LOOPBACK ? "LOOP " : "",
-				ifi->ifi_flags & IFF_POINTOPOINT ? "P2P " : "",
-				node->ip_address, 
-				node->network_mask, 
-				node->subnet_address);
-		#endif
-	}
-	free_ifi_info_plus(ifihead);
-	return list;
 }

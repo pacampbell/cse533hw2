@@ -6,6 +6,7 @@
 #include <stdbool.h>
 // system headers
 #include <sys/socket.h>
+#include <sys/select.h> 
 #include <netinet/in.h>
 #include <arpa/inet.h>
 // Program headers
@@ -25,12 +26,5 @@
  * @param config Config information passed in from file.
  */
 void run(Interface *interfaces, Config *config);
-
-/**
- * Discovers unicast interfaces on the system.
- * @param config Contains configuration info from file.
- * @return Returns all the unicast interfaces on the system.
- */
-Interface*  discoverInterfaces(Config *config);
 
 #endif
