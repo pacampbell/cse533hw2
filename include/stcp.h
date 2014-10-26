@@ -140,10 +140,12 @@ int send_pkt(int sockfd, struct stcp_pkt *pkt, int flags);
 int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 		struct sockaddr *dest_addr, socklen_t addrlen);
 /**
-* Wrappers for recv functions.
+* Wrappers for recv functions. Differs in the return value (see below)
 *
 * @param pkt Will be returned in host order
-* @return Total # bytes read, -1 on error check errno
+* @return -1: on system call error, check errno
+*          0: if the packet is too small
+*         >0: if packet is valid
 */
 int recv_pkt(int sockfd, struct stcp_pkt *pkt, int flags);
 int recvfrom_pkt(int sockfd, struct stcp_pkt *pkt, int flags,

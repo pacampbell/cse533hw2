@@ -265,6 +265,9 @@ int recvfrom_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 	ntoh_hdr(&pkt->hdr);
 	/* set data length */
 	pkt->dlen = rv - sizeof(struct stcp_hdr);
+	if(rv > 0 && rv < sizeof(struct stcp_hdr)) {
+		rv = 0;
+	}
 	return rv;
 }
 
@@ -275,5 +278,8 @@ int recv_pkt(int sockfd, struct stcp_pkt *pkt, int flags) {
 	ntoh_hdr(&pkt->hdr);
 	/* set data length */
 	pkt->dlen = rv - sizeof(struct stcp_hdr);
+	if(rv > 0 && rv < sizeof(struct stcp_hdr)) {
+		rv = 0;
+	}
 	return rv;
 }

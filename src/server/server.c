@@ -34,7 +34,7 @@ void run(Interface *interfaces, Config *config) {
 	bool running = true;
 
 	// Packet stuff that should probably be in child.
-	int recv_length = 0;
+	int valid_pkt;
 	struct stcp_pkt pkt;
 	struct sockaddr_in connection_addr;
     socklen_t connection_len = sizeof(connection_addr);
@@ -58,60 +58,47 @@ void run(Interface *interfaces, Config *config) {
 			if(FD_ISSET(node->sockfd, &rset)) {
 				// START HERE: check if process already exists, fork child, Check for same subnet, create new out of band socket, etc.
 				debug("Detected connection on interface: <%s> %s\n", node->name, node->ip_address);
-				recv_length = recvfrom_pkt(node->sockfd, &pkt, 0, (struct sockaddr *)&connection_addr, &connection_len);
-				// Check if process already exists for child
-				if((process = get_process(processes, node->ip_address, connection_addr.sin_port)) == NULL) {
-					// Process doesn't exist so create a new one
-					info("No process exists for %s:%d\n", node->ip_address, connection_addr.sin_port);
-					Process *new_process = malloc(sizeof(Process));
-					if(new_process != NULL) {
-						char buffer[SERVER_BUFFER_SIZE];
-						/* Convert client ipaddress to string */
-						inet_ntop(AF_INET, &(connection_addr.sin_addr), buffer, INET_ADDRSTRLEN);
-						/* Process fields */
-						new_process->pid = 0; 
-						/* Client Fields */
-						new_process->port = connection_addr.sin_port;
-						strcpy(new_process->ip_address, buffer);
-						/* Interface fields */
-						new_process->interface_fd = node->sockfd;
-						new_process->interface_port = config->port;
-						strcpy(new_process->interface_ip_address, node->ip_address);
-						strcpy(new_process->interface_network_mask, node->network_mask);
-						/* List fields */
-						new_process->next = NULL;
-						new_process->prev = NULL;
-						// Add the process to the list
-						add_process(&processes, new_process);
-						// Fork a new child
-						spawnchild(interfaces, new_process);
-					} else {
-						error("CRITICAL ERROR: Unable to allocate memory for a new process.\n");
-					}
+				valid_pkt = recvfrom_pkt(node->sockfd, &pkt, 0, (struct sockaddr *)&connection_addr, &connection_len);
+				if(valid_pkt < 0) {
+					/* Error on recv system call */
+					error("recvfrom: %s\n", strerror(errno));
+					//TODO: What do here? Return? exit failure?
+				} else if(valid_pkt == 0) {
+					debug("Ignoring message: too small to be STCP packet.\n");
 				} else {
-					// TODO: The process already exists; What to do?
-					info("Process already exists for %s:%d\n", process->ip_address, process->port);
-				}
-				// Once child is spawned check to see if same subnet
-				// create appropiate socket with correct permissions
-				// Send back to client
-
-				printf("received %d bytes\n", recv_length);
-				print_hdr(&pkt.hdr);
-
-				pkt.hdr.ack = pkt.hdr.seq + 1; 
-				pkt.hdr.seq = 0;
-				pkt.hdr.win = config->win_size;
-				pkt.hdr.flags = STCP_ACK | STCP_SYN;
-				pkt.dlen = 0;
-
-				printf("Sending packet header: ");
-				print_hdr(&pkt.hdr);
-
-				recv_length = sendto_pkt(node->sockfd, &pkt, 0, (struct sockaddr *)&connection_addr, connection_len);
-				if(recv_length < 0) {
-					perror("");
-					warn("Failed to send pkt\n");
+					// Check if process already exists for child
+					if((process = get_process(processes, node->ip_address, connection_addr.sin_port)) == NULL) {
+						// Process doesn't exist so create a new one
+						info("No process exists for %s:%d\n", node->ip_address, connection_addr.sin_port);
+						Process *new_process = malloc(sizeof(Process));
+						if(new_process != NULL) {
+							char buffer[SERVER_BUFFER_SIZE];
+							/* Convert client ipaddress to string */
+							inet_ntop(AF_INET, &(connection_addr.sin_addr), buffer, INET_ADDRSTRLEN);
+							/* Process fields */
+							new_process->pid = 0; 
+							/* Client Fields */
+							new_process->port = connection_addr.sin_port;
+							strcpy(new_process->ip_address, buffer);
+							/* Interface fields */
+							new_process->interface_fd = node->sockfd;
+							new_process->interface_port = config->port;
+							strcpy(new_process->interface_ip_address, node->ip_address);
+							strcpy(new_process->interface_network_mask, node->network_mask);
+							/* List fields */
+							new_process->next = NULL;
+							new_process->prev = NULL;
+							// Add the process to the list
+							add_process(&processes, new_process);
+							// Fork a new child
+							spawnchild(interfaces, new_process);
+						} else {
+							error("CRITICAL ERROR: Unable to allocate memory for a new process.\n");
+						}
+					} else {
+						// TODO: The process already exists; What to do?
+						info("Process already exists for %s:%d\n", process->ip_address, process->port);
+					}
 				}
 			}
 			node = node->next;
@@ -163,7 +150,7 @@ void childprocess(Process *process) {
 	sock = createClientSocket(&client_addr, &server_addr, samesub);
 
 	// Send SYN | ACK for new socket
-	if(sock > 0) {
+	if(sock >= 0) {
 		warn("SYN | ACK not implemented.\n");
 	} else {
 		error("Failed to create a socket.\n");
