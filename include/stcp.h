@@ -28,8 +28,7 @@ struct stcp_hdr {
 	uint16_t flags;		/* Flags */
 #define STCP_FIN  0x01
 #define STCP_SYN  0x02
-#define STCP_RST  0x04
-#define STCP_ACK  0x08
+#define STCP_ACK  0x04
 };
 
 /* STCP Packet */
@@ -38,10 +37,6 @@ struct stcp_pkt {
 	char data[STCP_MAX_DATA];	/* Segment data		*/
 	int dlen;				/* Length of data */
 };
-/* convert packet from/to host order */
-void hton_hdr(struct stcp_hdr *hdr);
-void ntoh_hdr(struct stcp_hdr *hdr);
-void print_hdr(struct stcp_hdr *hdr);
 
 /* STCP recv circular buffer entry */
 struct stcp_seg {
@@ -61,6 +56,7 @@ struct stcp_seg {
 struct stcp_rwin {
 	struct stcp_seg *cbuf;	/* (contiguous) circular window buffer 	*/
 	uint16_t size;			/* length of receive window (#stcp_seg allocated)*/
+	uint16_t adv;		    /* Current window size to advertise  */
 	uint32_t next_seq;		/* Sequence Number we expect to write next */
 	uint16_t write_head;	/* Index of the free entry to write
 								the next SYN segment 				*/
@@ -73,7 +69,7 @@ struct stcp_sock {
 	int sockfd;
 	/* TODO: MUTEX for concurrent sender/receiver access */
 	/* I don't know what I'm doing */
-    uint32_t recv_seq;
+	uint32_t recv_seq;
 	/* For Receiving */
 	uint16_t rwin_ad;	/* receive window size to advertise (in DG units) 	*/
 	struct stcp_rwin rwin;
@@ -81,6 +77,26 @@ struct stcp_sock {
 	/* For Sending */
 	uint16_t swin;
 };
+
+
+/* convert packet from/to host order */
+void hton_hdr(struct stcp_hdr *hdr);
+void ntoh_hdr(struct stcp_hdr *hdr);
+void print_hdr(struct stcp_hdr *hdr);
+/* Builds a pkt in host order */
+void build_pkt(struct stcp_pkt *pkt, uint32_t seq, uint32_t ack, uint16_t win,
+		uint16_t flags, char *data, int dlen);
+
+/**
+* Test if a packet is a valid SYN ACK in response to a SYN. SYN and ACK
+* flags should be set, ack # should be sent_seq + 1, and data field
+* should contain a port.
+*
+* @param pkt The received pkt in host order
+* @param sent_seq The starting sequence number we sent in our SYN
+* @return 1 if valid, 0 if invalid
+*/
+int _valid_SYNACK(struct stcp_pkt *pkt, uint32_t sent_seq);
 
 /*
  * Initialize a stcp_sock from the given socket. sockfd must haven been
@@ -112,6 +128,8 @@ int stcp_close(struct stcp_sock *sock);
  */
 int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *file);
 
+int stcp_client_recv(struct stcp_sock *sock);
+
 /**
  * Wrappers for send functions.
  *
@@ -120,7 +138,7 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
  */
 int send_pkt(int sockfd, struct stcp_pkt *pkt, int flags);
 int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
-        struct sockaddr *dest_addr, socklen_t addrlen);
+		struct sockaddr *dest_addr, socklen_t addrlen);
 /**
 * Wrappers for recv functions.
 *
@@ -129,6 +147,6 @@ int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 */
 int recv_pkt(int sockfd, struct stcp_pkt *pkt, int flags);
 int recvfrom_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
-        struct sockaddr *src_addr, socklen_t *addrlen);
+		struct sockaddr *src_addr, socklen_t *addrlen);
 
 #endif
