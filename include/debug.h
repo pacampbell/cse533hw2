@@ -19,9 +19,9 @@
 	#define info(S, ...) do{fprintf(stderr, KCYN "INFO: %s:%s:%d " S KNRM, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);} while(0)
 #else
 	#define debug(S, ...)
-	#define error(S, ...)
-	#define warn(S, ...)
-	#define info(S, ...)
+	#define error(S, ...) do{fprintf(stderr, KRED "ERROR: " S KNRM, ##__VA_ARGS__);} while(0)
+	#define warn(S, ...) do{fprintf(stderr, KYEL "WARN: " S KNRM, ##__VA_ARGS__);} while(0)
+	#define info(S, ...) do{fprintf(stderr, KCYN "INFO: " S KNRM, ##__VA_ARGS__);} while(0)
 #endif
 
 #endif
