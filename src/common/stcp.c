@@ -54,42 +54,60 @@ int _valid_SYNACK(struct stcp_pkt *pkt, uint32_t sent_seq) {
 	return 1;
 }
 
-int stcp_socket(int sockfd, uint16_t rwin, struct stcp_sock *sock) {
+int stcp_socket(int sockfd, uint16_t rwin, uint16_t swin, struct stcp_sock *sock) {
 	if(sockfd < 0) {
-		debug("stcp_socket passed invalid sockfd\n");
+		error("stcp_socket invalid sockfd: %d\n", sockfd);
 		return -1;
 	}
-	if(rwin == 0) {
-		debug("stcp_socket passed invalid rwin\n");
+	if(rwin == 0 && swin == 0) {
+		error("stcp_socket rwin and swin cannot both be 0.\n");
 		return -1;
 	}
 	if(sock == NULL) {
-		debug("stcp_socket passed invalid stcp_sock\n");
+		error("stcp_socket passed NULL stcp_sock\n");
 		return -1;
 	}
 
 	/* zero out the struct */
 	memset(sock, 0, sizeof(struct stcp_sock));
 
-	/* set the initial values for receiving */
 	sock->sockfd = sockfd;
-	/* Recv window size */
-	sock->rwin.size = rwin;
-	/* Allocate space for the recv window */
-	sock->rwin.cbuf = calloc(rwin, sizeof(struct stcp_seg));
-	if(sock->rwin.cbuf == NULL) {
-		perror("stcp_socket: calloc");
-		return -1;
+	/* receiving window size */
+	sock->recv_win.size = rwin;
+	/* sending window size */
+	sock->send_win.size = swin;
+	/* Allocate space for the receiving window */
+	if(rwin != 0) {
+		sock->recv_win.buf = calloc(rwin, sizeof(Elem));
+		if(sock->recv_win.buf == NULL) {
+			error("stcp_socket: calloc: %s", strerror(errno));
+			return -1;
+		}
+	} else {
+		sock->recv_win.buf = NULL;
+	}
+	/* Allocate space for the sending window */
+	if(swin != 0) {
+		sock->send_win.buf = calloc(swin, sizeof(Elem));
+		if(sock->send_win.buf == NULL) {
+			error("stcp_socket: calloc: %s", strerror(errno));
+			return -1;
+		}
+	} else {
+		sock->send_win.buf = NULL;
 	}
 	return 0;
 }
 
 int stcp_close(struct stcp_sock *sock){
 	/* free receive buffer */
-	if(sock->rwin.cbuf != NULL) {
-		free(sock->rwin.cbuf);
+	if(sock->recv_win.buf != NULL) {
+		free(sock->recv_win.buf);
 	}
 	/* free send buffer */
+	if(sock->send_win.buf != NULL) {
+		free(sock->send_win.buf);
+	}
 	/* close socket */
 	if(sock->sockfd >= 0){
 		return close(sock->sockfd);
@@ -110,7 +128,7 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 
 	/* init first SYN */
 	sendSYN = 1;
-	build_pkt(&sent_pkt, start_seq, 0, sock->rwin.size, STCP_SYN, file, strlen(file));
+	build_pkt(&sent_pkt, start_seq, 0, RWIN_ADV(sock->recv_win), STCP_SYN, file, strlen(file));
 	/* attempt to connect backed by timeout */
 	while (1) {
 		if(sendSYN) {
@@ -180,7 +198,7 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 		return -1;
 	}
 	/* init ACK packet */
-	build_pkt(&ack_pkt, 0, reply_pkt.hdr.seq + 1, sock->rwin.size, STCP_ACK, NULL, 0);
+	build_pkt(&ack_pkt, 0, reply_pkt.hdr.seq + 1, RWIN_ADV(sock->recv_win), STCP_ACK, NULL, 0);
 	printf("Sending ACK to server ");
 	print_hdr(&ack_pkt.hdr);
 	/* Send ACK packet to server */
@@ -220,7 +238,7 @@ int stcp_client_recv(struct stcp_sock *sock) {
 	/* Buffer and shit */
 
 	/* init ACK packet */
-	build_pkt(&ack_pkt, 0,sock->rwin.next_seq, sock->rwin.adv, STCP_ACK, NULL, 0);
+	build_pkt(&ack_pkt, 0,sock->next_seq, RWIN_ADV(sock->recv_win), STCP_ACK, NULL, 0);
 	info("Sending ACK: ");
 	print_hdr(&ack_pkt.hdr);
 	/* Send ACK packet to server */

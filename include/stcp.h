@@ -35,47 +35,44 @@ struct stcp_hdr {
 struct stcp_pkt {
 	struct stcp_hdr hdr;		/* Segment header	*/
 	char data[STCP_MAX_DATA];	/* Segment data		*/
-	int dlen;				/* Length of data */
+	int dlen;					/* Length of data */
 };
 
-/* STCP recv circular buffer entry */
-struct stcp_seg {
-	/* STCP Packet */
-	struct stcp_pkt pkt;
-	/* STCP Segment meta-data used to manage circular buffer */
-	uint8_t valid;				/* Entry is valid this is set to 1
-									on recv and 0 on read */
-
-	/* For Receiving ??? */
-
-	/* For Sending ??? */
-	/* time sent and num retried */
-};
+/* STCP circular buffer entry */
+typedef struct {
+	/* Stuff common to both send/recv window elems */
+	uint8_t valid;			/* Entry is valid this is set to 1
+								on recv and 0 on read */
+	struct stcp_pkt pkt;	/* Packet to buffer */
+	/* stuff only for sending window element */
+	/* TODO: add rtt_info and other stuff */
+} Elem;
 
 /* STCP recv sliding window */
-struct stcp_rwin {
-	struct stcp_seg *cbuf;	/* (contiguous) circular window buffer 	*/
-	uint16_t size;			/* length of receive window (#stcp_seg allocated)*/
-	uint16_t adv;		    /* Current window size to advertise  */
-	uint32_t next_seq;		/* Sequence Number we expect to write next */
-	uint16_t write_head;	/* Index of the free entry to write
-								the next SYN segment 				*/
-	uint16_t read_head;		/* Index of the first unread entry		*/
-};
+typedef struct {
+	Elem *buf;			/* (contiguous) buffer space for size Elems */
+	uint16_t size;		/* length of receive window (#Elem allocated) */
+	uint16_t count;		/* # of elements in buffer */
+	uint16_t end;		/* Index of the next free elem		*/
+	uint16_t start;		/* Index of the oldest elem		*/
+	/* stuff specifically for receiving window */
+} Cbuf;
 
 /* This will be the 'new socket' used to send and recv segments */
 struct stcp_sock {
-	/* Real DG socket */
-	int sockfd;
-	/* TODO: MUTEX for concurrent sender/receiver access */
-	/* I don't know what I'm doing */
-	uint32_t recv_seq;
+	int sockfd;			/* The connected UDP socket */
+	/* TODO: MUTEX for concurrent producer/consumer access */
+
 	/* For Receiving */
-	uint16_t rwin_ad;	/* receive window size to advertise (in DG units) 	*/
-	struct stcp_rwin rwin;
+	uint32_t next_seq;	/* Sequence Number we expect to recv next */
+	Cbuf recv_win;
 
 	/* For Sending */
-	uint16_t swin;
+	uint32_t next_ack;	/* Acknowledgement Number we expect to recv next */
+	Cbuf send_win;
+	uint16_t cwin;		/* Congestion window value */
+	uint16_t ssthresh;	/* Slow Start Threshhold */
+	// TODO: other shit for sending
 };
 
 
@@ -105,10 +102,11 @@ int _valid_SYNACK(struct stcp_pkt *pkt, uint32_t sent_seq);
  *
  * @param sockfd A valid sockfd that has been created by createClientSocket
  * @param rwin   The maximum number of segments in the receiving window
+ * @param swin   The maximum number of segments in the sending window
  * @param sock   The stcp_sock to initialize
  * @return 0 on success or -1 on error.
  */
-int stcp_socket(int sockfd, uint16_t rwin, struct stcp_sock *sock);
+int stcp_socket(int sockfd, uint16_t rwin, uint16_t swin, struct stcp_sock *sock);
 
 /*
  * Free all memory associated with this stcp socket and close the
@@ -128,6 +126,12 @@ int stcp_close(struct stcp_sock *sock);
  */
 int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *file);
 
+
+/*
+ * Recv a pkt from the server, buffer it, and send an ACK.
+ *
+ * @param sock A stcp_sock initialized by the client for reading.
+ */
 int stcp_client_recv(struct stcp_sock *sock);
 
 /**
@@ -150,5 +154,12 @@ int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 int recv_pkt(int sockfd, struct stcp_pkt *pkt, int flags);
 int recvfrom_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 		struct sockaddr *src_addr, socklen_t *addrlen);
+
+
+/*
+ * Start Circle Buffer Functions/Macros
+ */
+
+#define RWIN_ADV(rwin) ((rwin).size - (rwin).count)
 
 #endif

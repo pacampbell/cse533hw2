@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
 	fd = createClientSocket(&serv_addr, &client_addr, local);
 
 	/* initialize our STCP socket */
-	if(stcp_socket(fd, config.win_size, &stcp) < 0) {
+	if(stcp_socket(fd, config.win_size, 0, &stcp) < 0) {
 		fprintf(stderr, "stcp_socket failed\n");
 		exit(EXIT_FAILURE);
 	}
