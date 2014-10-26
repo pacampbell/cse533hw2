@@ -22,12 +22,12 @@ bool remove_node(Interface **list, Interface *node) {
 	Interface *cn;
 	// Make sure the list isn't NULL
 	if(list == NULL || *list == NULL) {
-		error("Attempted to remove a node from a NULL list.\n");
+		error("Attempted to remove an interface from a NULL list.\n");
 		goto finished;
 	}
 	// Make sure the node isn't NULL
 	if(node == NULL) {
-		error("Attempted to remove a NULL node from the list.\n");
+		error("Attempted to remove a NULL interface from the list.\n");
 		goto finished;
 	}
 	// If we got here then lets try to remove the node.
@@ -39,8 +39,11 @@ bool remove_node(Interface **list, Interface *node) {
 			if(node->prev == NULL) {
 				// We found the head
 				*list = node->next;
+				if(*list != NULL) {
+					(*list)->prev = NULL;
+				}
 			} else {
-				node->prev = node->next;
+				node->prev->next = node->next;
 				node->next->prev = node->prev;
 			}
 			free(node);
@@ -52,7 +55,7 @@ bool remove_node(Interface **list, Interface *node) {
 	// If the node was unable to be removed.
 	if(!success) {
 		// Node wasn't removed so we can still use it.
-		warn("The node: <%s> %s doesn't exist in the list.\n", node->name, node->ip_address);
+		warn("The interface: <%s> %s doesn't exist in the list.\n", node->name, node->ip_address);
 	}
 finished:
 	return success;
