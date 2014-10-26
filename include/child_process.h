@@ -11,9 +11,17 @@
  * that was forked off.
  */
 typedef struct _Process {
+	/* Process information */
 	unsigned int pid;
+	/* Client connection info */
 	unsigned int port;
 	char ip_address[PROCESSES_BUFFER];
+	/* Interface connection info */
+	unsigned int interface_fd;
+	unsigned int interface_port;
+	char interface_ip_address[PROCESSES_BUFFER];
+	char interface_network_mask[PROCESSES_BUFFER];
+	/* List fields */
 	struct _Process *next;
 	struct _Process *prev;
 } Process;

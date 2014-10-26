@@ -33,9 +33,9 @@ bool remove_node(Interface **list, Interface *node) {
 	// If we got here then lets try to remove the node.
 	cn = *list;
 	while(cn != NULL) {
-		if(strcmp(cn->name, node->name) == 0 && strcmp(cn->ip_address, node->ip_address)) {
+		if(strcmp(cn->name, node->name) == 0 && strcmp(cn->ip_address, node->ip_address) == 0) {
 			success = true;
-			debug("Removed: <%s> %s from the list of interfaces", node->name, node->ip_address);
+			debug("Removed: <%s> %s from the list of interfaces\n", node->name, node->ip_address);
 			if(node->prev == NULL) {
 				// We found the head
 				*list = node->next;
@@ -43,7 +43,6 @@ bool remove_node(Interface **list, Interface *node) {
 				node->prev = node->next;
 				node->next->prev = node->prev;
 			}
-			// Free the space since it should of been dynamiclly alocated.
 			free(node);
 			break;
 		}
@@ -59,29 +58,22 @@ finished:
 	return success;
 }
 
-Interface* discoverInterfaces() {
+Interface* discoverInterfaces(Config *config, bool shouldBind) {
 	struct ifi_info	*ifi, *ifihead;
 	struct sockaddr	*sa;
 	unsigned int a = 0, b = 0;
+	bool insert = false;
+	int server_fd = 0;
 	// Create memory for the list.
 	Interface *list = NULL;
 	// Use crazy code to loop through the interfaces
 	for (ifihead = ifi = Get_ifi_info_plus(AF_INET, 1); ifi != NULL; ifi = ifi->ifi_next) {
 		// Create node
 		Interface *node = malloc(sizeof(Interface));
+		insert = false;
 		// Null out pointers
 		node->next = NULL;
 		node->prev = NULL;
-		// Figure out where to place the node
-		if(list == NULL) {
-			list = node;	
-		} else {
-			// Just push it down the list
-			// IE: It goes in reverse discovery order
-			node->next = list;
-			list->prev = node;
-			list = node;
-		}
 		// Copy the name of the interface
 		strcpy(node->name, ifi->ifi_name); 
 		// Copy the IPAddress
@@ -112,25 +104,66 @@ Interface* discoverInterfaces() {
 			node->ip_address, 
 			node->network_mask, 
 			node->subnet_address);
+
+		if(shouldBind) {
+			/* Config was successfully parsed; attempt to bind sockets */
+			server_fd = createServer(node->ip_address, config->port);
+			if(server_fd != SERVER_SOCKET_BIND_FAIL) {
+				node->sockfd = server_fd;
+				insert = true;
+			} else {
+				/* Unable to bind socket to port */
+				fprintf(stderr, "Failed to bind socket: %s:%u\n", node->ip_address, config->port);
+			}
+		} else {
+			insert = true;
+		}
+
+		// If all was successful insert into the list
+		if(insert) {
+			if(list == NULL) {
+				list = node;	
+			} else {
+				// Just push it down the list
+				// IE: It goes in reverse discovery order
+				node->next = list;
+				list->prev = node;
+				list = node;
+			}
+		}
 	}
 	free_ifi_info_plus(ifihead);
 	return list;
+}
+
+unsigned int size(Interface *interfaces) {
+	unsigned int size = 0;
+	if(interfaces != NULL) {
+		Interface *node = interfaces;
+		while(node != NULL) {
+			size++;
+			node = node->next;
+		}
+	} else {
+		warn("Trying to find size of a non-existent interface list.\n");
+	}
+	return size;
 }
 
 bool isSameSubnet(const char *server_ip, const char *client_ip, const char *network_mask) {
 	bool same = false;
 	if(server_ip != NULL && client_ip != NULL && network_mask != NULL) {
 		struct sockaddr_in server_sockaddr, client_sockaddr, mask_sockaddr;
-		unsigned int server_mask = 0, client_mask = 0;
+		unsigned int server_subnet = 0, client_subnet = 0;
 		// Convert the string to sockaddr_in
-		inet_pton(AF_INET, server_ip, &server_sockaddr);
-		inet_pton(AF_INET, client_ip, &client_sockaddr);
-		inet_pton(AF_INET, network_mask, &mask_sockaddr);
+		inet_aton(server_ip, &server_sockaddr.sin_addr);
+		inet_aton(client_ip, &client_sockaddr.sin_addr);
+		inet_aton(network_mask, &mask_sockaddr.sin_addr);
 		// Mask the addresses 
-		server_mask = server_sockaddr.sin_addr.s_addr & mask_sockaddr.sin_addr.s_addr;
-		client_mask = client_sockaddr.sin_addr.s_addr & mask_sockaddr.sin_addr.s_addr;
+		server_subnet = server_sockaddr.sin_addr.s_addr & mask_sockaddr.sin_addr.s_addr;
+		client_subnet = client_sockaddr.sin_addr.s_addr & mask_sockaddr.sin_addr.s_addr;
 		// Determine if they are the same
-		same = server_mask == client_mask;
+		same = server_subnet == client_subnet;
 	} else {
 		error("NULL value passed in.\n server_ip = %s\nclient_ip = %s\nnetwork_mask = %s\n",
 			server_ip == NULL ? "NULL" : server_ip,
