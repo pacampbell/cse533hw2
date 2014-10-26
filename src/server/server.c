@@ -150,6 +150,7 @@ int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 void childprocess(Process *process, struct stcp_pkt *pkt) {
 	int sock = 0;
 	bool samesub = false;
+	struct stcp_pkt ack;
 	struct sockaddr_in client_addr, server_addr;
 	// Zero out memory
 	memset((char *)&client_addr, 0, sizeof(client_addr));
@@ -172,7 +173,7 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 
 	// Send SYN | ACK for new socket
 	if(sock >= 0) {
-		int sent = 0;
+		int len = 0;
 		// Set up packet data
 		build_pkt(
 			pkt, 
@@ -185,7 +186,7 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 		);
 
 		// Send the packet and see what happens
-		sent = sendto_pkt(
+		len = sendto_pkt(
 			process->interface_fd,
 			pkt,
 			0,
@@ -193,11 +194,17 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 			sizeof(client_addr)
 		);
 		
-		debug("Sent %d bytes to the client\n", sent);
+		debug("Sent %d bytes to the client\n", len);
 		// Log on the serer the error
-		if(sent < 0) {
+		if(len < 0) {
 			error("Failed to send packet to %s:%d\n", process->ip_address, process->port);
 		}
+		/* Wait for client's ACK */
+		/* TODO: validate ACK */
+		recv_pkt(sock, &ack, 0);
+		debug("Received pkt from client ");
+		print_hdr(&ack.hdr);
+		/* Connection established start sending file */
 	} else {
 		error("Failed to create a socket.\n");
 	}

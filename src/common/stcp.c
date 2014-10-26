@@ -276,7 +276,7 @@ int stcp_client_recv(struct stcp_sock *sock) {
  * This is called when the client wakes up.
  */
 int stcp_client_read(struct stcp_sock *sock) {
-	warn("stcp_client_read not yet implemented!");
+	warn("stcp_client_read not yet implemented!\n");
 	return -1;
 }
 
