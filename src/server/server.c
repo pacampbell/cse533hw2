@@ -35,7 +35,6 @@ void run(Interface *interfaces, Config *config) {
 
 	// Packet stuff that should probably be in child.
 	int valid_pkt;
-	struct stcp_pkt pkt;
 	struct sockaddr_in connection_addr;
     socklen_t connection_len = sizeof(connection_addr);
 
@@ -56,6 +55,7 @@ void run(Interface *interfaces, Config *config) {
 		node = interfaces;
 		while(node != NULL) {
 			if(FD_ISSET(node->sockfd, &rset)) {
+				struct stcp_pkt pkt;
 				// START HERE: check if process already exists, fork child, Check for same subnet, create new out of band socket, etc.
 				debug("Detected connection on interface: <%s> %s\n", node->name, node->ip_address);
 				valid_pkt = recvfrom_pkt(node->sockfd, &pkt, 0, (struct sockaddr *)&connection_addr, &connection_len);
@@ -85,6 +85,7 @@ void run(Interface *interfaces, Config *config) {
 							new_process->port = connection_addr.sin_port;
 							strcpy(new_process->ip_address, buffer);
 							/* Interface fields */
+							new_process->interface_win_size = config->win_size;
 							new_process->interface_fd = node->sockfd;
 							new_process->interface_port = config->port;
 							strcpy(new_process->interface_ip_address, node->ip_address);
@@ -95,7 +96,7 @@ void run(Interface *interfaces, Config *config) {
 							// Add the process to the list
 							add_process(&processes, new_process);
 							// Fork a new child
-							pid = spawnchild(interfaces, new_process);
+							pid = spawnchild(interfaces, new_process, &pkt);
 							if(pid == -1 || pid == 0) {
 								// Either fork failed or we are in the child process
 								// Set running to false and break out of this loop
@@ -119,7 +120,8 @@ void run(Interface *interfaces, Config *config) {
 	destroy_processes(&processes);
 }
 
-int spawnchild(Interface *interfaces, Process *process) {
+int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
+	// TODO: Add signal handler for sigchild, to remove process from process list
 	int pid = fork();
 	switch(pid) {
 		case -1:
@@ -130,7 +132,8 @@ int spawnchild(Interface *interfaces, Process *process) {
 			/* In child */
 			info("Server Child - started!\n");
 			// TODO: Close connection to other interfaces
-			childprocess(process);
+			// other FDs, etc.
+			childprocess(process, pkt);
 			break;
 		default:
 			/* In parent */
@@ -141,7 +144,7 @@ int spawnchild(Interface *interfaces, Process *process) {
 	return pid;
 }
 
-void childprocess(Process *process) {
+void childprocess(Process *process, struct stcp_pkt *pkt) {
 	int sock = 0;
 	bool samesub = false;
 	struct sockaddr_in client_addr, server_addr;
@@ -150,7 +153,7 @@ void childprocess(Process *process) {
 	memset((char *)&server_addr, 0, sizeof(server_addr));
 	// Set client fields
 	client_addr.sin_family = AF_INET;
-	client_addr.sin_port = htons(process->port);
+	client_addr.sin_port = process->port;
 	inet_aton(process->ip_address, &client_addr.sin_addr);
 	// Set server fields
 	server_addr.sin_family = AF_INET;
@@ -159,12 +162,35 @@ void childprocess(Process *process) {
 
 	// Attach socket depending on if local or not
 	samesub = isSameSubnet(process->interface_ip_address, 
-		process->ip_address, process->interface_network_mask);
+						   process->ip_address, 
+						   process->interface_network_mask);
+	// Create socketfd
 	sock = createClientSocket(&client_addr, &server_addr, samesub);
 
 	// Send SYN | ACK for new socket
 	if(sock >= 0) {
-		warn("SYN | ACK not implemented.\n");
+		int sent = 0;
+		// Set up packet data
+		build_pkt(
+			pkt, 
+			0,
+			pkt->hdr.seq + 1,
+			process->interface_win_size,
+			STCP_SYN | STCP_ACK,
+			&server_addr.sin_port,
+			sizeof(int)
+		);
+
+		// Send the packet and see what happens
+		sent = sendto_pkt(
+			process->interface_fd,
+			pkt,
+			0,
+			(struct sockaddr*)&client_addr,
+			sizeof(client_addr)
+		);
+		
+		debug("Sent %d bytes to the client\n", sent);
 	} else {
 		error("Failed to create a socket.\n");
 	}

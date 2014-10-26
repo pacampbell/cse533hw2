@@ -1,7 +1,7 @@
 #include "stcp.h"
 
 void build_pkt(struct stcp_pkt *pkt, uint32_t seq, uint32_t ack, uint16_t win,
-				uint16_t flags, char *data, int dlen) {
+				uint16_t flags, void *data, int dlen) {
 	pkt->hdr.seq = seq;
 	pkt->hdr.ack = ack;
 	pkt->hdr.win = win;

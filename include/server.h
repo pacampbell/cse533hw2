@@ -33,14 +33,16 @@ void run(Interface *interfaces, Config *config);
  * Forks a new child process.
  * @param interfaces List of all interfaces on this node.
  * @param process Process that is about to be spawned (need to populate pid field).
+ * @param pkt The initial packet from the handshake.
  * @return returns the pid from the fork() call.
  */
-int spawnchild(Interface *interfaces, Process *process);
+int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt);
 
 /**
  * All code that the child process must execute is handled here.
  * @param the process that has information about all interfaces in use.
+ * @param pkt The initial packet from the handshake.
  */
-void childprocess(Process *process);
+void childprocess(Process *process, struct stcp_pkt *pkt);
 
 #endif

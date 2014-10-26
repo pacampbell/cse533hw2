@@ -19,6 +19,7 @@ typedef struct _Process {
 	/* Interface connection info */
 	unsigned int interface_fd;
 	unsigned int interface_port;
+	unsigned int interface_win_size;
 	char interface_ip_address[PROCESSES_BUFFER];
 	char interface_network_mask[PROCESSES_BUFFER];
 	/* List fields */

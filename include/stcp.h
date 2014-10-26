@@ -82,7 +82,7 @@ void ntoh_hdr(struct stcp_hdr *hdr);
 void print_hdr(struct stcp_hdr *hdr);
 /* Builds a pkt in host order */
 void build_pkt(struct stcp_pkt *pkt, uint32_t seq, uint32_t ack, uint16_t win,
-		uint16_t flags, char *data, int dlen);
+		uint16_t flags, void *data, int dlen);
 
 /**
 * Test if a packet is a valid SYN ACK in response to a SYN. SYN and ACK
