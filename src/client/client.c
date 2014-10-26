@@ -135,8 +135,6 @@ int runProducer(struct stcp_sock *stcp) {
 			return -1;
 		}
 		if (FD_ISSET(stcp->sockfd, &rset)) {
-			printf("Must call recv_send_ack.\n");
-
 			stcp_client_recv(stcp);
 
 			/* if is FIN, send ACK and break */
@@ -157,7 +155,7 @@ int runProducer(struct stcp_sock *stcp) {
 
 void *runConsumer(void *arg) {
 	struct consumer_args *args = arg;
-  //  struct stcp_sock *stcp = args->stcp;
+    struct stcp_sock *stcp = args->stcp;
 	unsigned int ms;
 	/* set the seed for our uniform uniformly distributed RNG */
 	srand48(args->seed);
@@ -168,6 +166,7 @@ void *runConsumer(void *arg) {
 			perror("runConsumer: usleep");
 		}
 		/* Wake up and read from buffer */
+		stcp_client_read(stcp);
 	}
 	return 0;
 }

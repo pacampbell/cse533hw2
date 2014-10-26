@@ -31,11 +31,11 @@ void ntoh_hdr(struct stcp_hdr *hdr) {
 }
 
 void print_hdr(struct stcp_hdr *hdr) {
-	printf(" seq:%u, ack:%u, win:%hu, flags:%s %s %s\n", hdr->seq, hdr->ack, hdr->win,
+	printf(" seq:%u, ack:%u, win:%hu, flags:%s %s %s\n", hdr->seq, hdr->ack,
+			hdr->win,
 			(hdr->flags & STCP_FIN)? "FIN" : "",
 			(hdr->flags & STCP_SYN)? "SYN" : "",
 			(hdr->flags & STCP_ACK)? "ACK" : "");
-
 }
 
 int _valid_SYNACK(struct stcp_pkt *pkt, uint32_t sent_seq) {
@@ -44,17 +44,23 @@ int _valid_SYNACK(struct stcp_pkt *pkt, uint32_t sent_seq) {
 		return 0;
 	}
 	if(pkt->hdr.ack != sent_seq + 1){
-		error("Packet ack: %u, expected ack: %u!\n", pkt->hdr.ack, sent_seq + 1);
+		error("Packet ack: %u, expected ack: %u!\n", pkt->hdr.ack, sent_seq+1);
 		return 0;
 	}
 	if(pkt->dlen <= 0){
 		error("Packet data: port not present!\n");
 		return 0;
+	} else if (pkt->dlen != 2){
+		error("Packet data: port not valid, expected 2 bytes, got %d!\n",
+				pkt->dlen);
+		return 0;
 	}
 	return 1;
 }
 
-int stcp_socket(int sockfd, uint16_t rwin, uint16_t swin, struct stcp_sock *sock) {
+int stcp_socket(int sockfd, uint16_t rwin, uint16_t swin,
+				struct stcp_sock *sock) {
+	int err;
 	if(sockfd < 0) {
 		error("stcp_socket invalid sockfd: %d\n", sockfd);
 		return -1;
@@ -72,6 +78,11 @@ int stcp_socket(int sockfd, uint16_t rwin, uint16_t swin, struct stcp_sock *sock
 	memset(sock, 0, sizeof(struct stcp_sock));
 
 	sock->sockfd = sockfd;
+	/* Initialize the Producer/Consumer mutex */
+	if((err = pthread_mutex_init(&sock->mutex, NULL)) != 0) {
+		error("stcp_socket: pthread_mutex_init: %s", strerror(err));
+		return -1;
+	}
 	/* receiving window size */
 	sock->recv_win.size = rwin;
 	/* sending window size */
@@ -100,6 +111,12 @@ int stcp_socket(int sockfd, uint16_t rwin, uint16_t swin, struct stcp_sock *sock
 }
 
 int stcp_close(struct stcp_sock *sock){
+	int err;
+	/* Destroy the Producer/Consumer mutex */
+	if((err = pthread_mutex_destroy(&sock->mutex)) != 0) {
+		error("stcp_socket: pthread_mutex_destroy: %s", strerror(err));
+		return -1;
+	}
 	/* free receive buffer */
 	if(sock->recv_win.buf != NULL) {
 		free(sock->recv_win.buf);
@@ -121,7 +138,7 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 	uint32_t start_seq = 0;
 	struct stcp_pkt sent_pkt, reply_pkt, ack_pkt;
 	/* 1s timeout for connect + Select stuff */
-	int retries = 0, max_retries = 2, timeout = 1;
+	int retries = 0, max_retries = 5, timeout = 1;
 	struct timeval tv = {1L, 0L};
 	int nfds;
 	fd_set rset;
@@ -163,12 +180,14 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 				return -1;
 			}
 			/* parse the new port from the server */
-			printf("Recv'd packet: ");
+			debug("Recv'd packet: ");
 			print_hdr(&reply_pkt.hdr);
 			/* determine if it was a valid connection reply */
 			if(_valid_SYNACK(&reply_pkt, start_seq)) {
-				newport = atoi(reply_pkt.data);
-				printf("New port received: %hu\n", newport);
+				uint16_t *p = (uint16_t *)reply_pkt.data;
+				/* port should be the only 2 bytes of data in host order */
+				newport = ntohs(*p);
+				info("New port received: %hu\n", newport);
 				/* break out out the loop */
 				break;
 			} else {
@@ -251,6 +270,14 @@ int stcp_client_recv(struct stcp_sock *sock) {
 		return -1;
 	}
 	return 0;
+}
+
+/**
+ * This is called when the client wakes up.
+ */
+int stcp_client_read(struct stcp_sock *sock) {
+	warn("stcp_client_read not yet implemented!");
+	return -1;
 }
 
 int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
