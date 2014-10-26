@@ -33,8 +33,9 @@ void run(Interface *interfaces, Config *config);
  * Forks a new child process.
  * @param interfaces List of all interfaces on this node.
  * @param process Process that is about to be spawned (need to populate pid field).
+ * @return returns the pid from the fork() call.
  */
-void spawnchild(Interface *interfaces, Process *process);
+int spawnchild(Interface *interfaces, Process *process);
 
 /**
  * All code that the child process must execute is handled here.

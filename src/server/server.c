@@ -66,6 +66,7 @@ void run(Interface *interfaces, Config *config) {
 					Process *new_process = malloc(sizeof(Process));
 					if(new_process != NULL) {
 						char buffer[SERVER_BUFFER_SIZE];
+						int pid;
 						/* Convert client ipaddress to string */
 						inet_ntop(AF_INET, &(connection_addr.sin_addr), buffer, INET_ADDRSTRLEN);
 						/* Process fields */
@@ -84,7 +85,13 @@ void run(Interface *interfaces, Config *config) {
 						// Add the process to the list
 						add_process(&processes, new_process);
 						// Fork a new child
-						spawnchild(interfaces, new_process);
+						pid = spawnchild(interfaces, new_process);
+						if(pid == -1 || pid == 0) {
+							// Either fork failed or we are in the child process
+							// Set running to false and break out of this loop
+							running = false;
+							break;
+						}
 					} else {
 						error("CRITICAL ERROR: Unable to allocate memory for a new process.\n");
 					}
@@ -121,7 +128,7 @@ void run(Interface *interfaces, Config *config) {
 	destroy_processes(&processes);
 }
 
-void spawnchild(Interface *interfaces, Process *process) {
+int spawnchild(Interface *interfaces, Process *process) {
 	int pid = fork();
 	switch(pid) {
 		case -1:
@@ -139,6 +146,7 @@ void spawnchild(Interface *interfaces, Process *process) {
 			process->pid = pid;
 			break;
 	}
+	return pid;
 }
 
 void childprocess(Process *process) {
