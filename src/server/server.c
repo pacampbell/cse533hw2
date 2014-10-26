@@ -204,7 +204,7 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 }
 
 void sigchld_handler(int signum) {
-    pid_t pid;
+    int pid;
     Process *process = NULL;
     while ((pid = waitpid(-1, NULL, WNOHANG)) != -1) {
         process = get_process_by_pid(processes, pid);

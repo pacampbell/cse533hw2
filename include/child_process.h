@@ -55,7 +55,7 @@ Process* get_process(Process *processes, const char *ipaddress, unsigned int por
  * @param pid PID of the process to search for.
  * @return Returns the process if found, else NULL.
  */
-Process* get_process_by_pid(Process *processes, pid_t pid);
+Process* get_process_by_pid(Process *processes, int pid);
 
 /**
  * Frees all memory from the process list.

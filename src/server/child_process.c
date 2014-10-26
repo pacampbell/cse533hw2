@@ -82,7 +82,7 @@ Process* get_process(Process *processes, const char *ipaddress, unsigned int por
 	return found;
 }
 
-Process* get_process_by_pid(Process *processes, pid_t pid) {
+Process* get_process_by_pid(Process *processes, int pid) {
 	Process *found = NULL;
 	if(processes != NULL) {
 		Process *node = processes;
