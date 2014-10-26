@@ -9,6 +9,7 @@
 #include <sys/select.h> 
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <unistd.h>
 // Program headers
 #include "utility.h"
 #include "stcp.h"
@@ -27,5 +28,18 @@
  * @param config Config information passed in from file.
  */
 void run(Interface *interfaces, Config *config);
+
+/**
+ * Forks a new child process.
+ * @param interfaces List of all interfaces on this node.
+ * @param process Process that is about to be spawned (need to populate pid field).
+ */
+void spawnchild(Interface *interfaces, Process *process);
+
+/**
+ * All code that the child process must execute is handled here.
+ * @param the process that has information about all interfaces in use.
+ */
+void childprocess(Process *process);
 
 #endif
