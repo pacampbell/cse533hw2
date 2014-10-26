@@ -103,7 +103,7 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 	uint32_t start_seq = 0;
 	struct stcp_pkt sent_pkt, reply_pkt, ack_pkt;
 	/* 1s timeout for connect + Select stuff */
-	int retries = 0, max_retries = 3, timeout = 1;
+	int retries = 0, max_retries = 2, timeout = 1;
 	struct timeval tv = {1L, 0L};
 	int nfds;
 	fd_set rset;
@@ -174,7 +174,7 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 			sendSYN = 1;
 		}
 	}
-	/* connect to new port */
+	/* Reconnect to the new port */
 	serv_addr->sin_port = htons(newport);
 	if(udpConnect(sock->sockfd, serv_addr) < 0) {
 		return -1;
