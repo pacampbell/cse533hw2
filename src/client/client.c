@@ -167,6 +167,7 @@ void *runConsumer(void *arg) {
 		}
 		/* Wake up and read from buffer */
 		stcp_client_read(stcp);
+		/* TODO: handle error */
 	}
 	return 0;
 }

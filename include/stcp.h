@@ -62,9 +62,9 @@ typedef struct {
 /* This will be the 'new socket' used to send and recv segments */
 struct stcp_sock {
 	int sockfd;			/* The connected UDP socket */
-	/* TODO: MUTEX for concurrent producer/consumer access */
-	pthread_mutex_t mutex;
+
 	/* For Receiving */
+	pthread_mutex_t mutex;
 	uint32_t next_seq;	/* Sequence Number we expect to recv next */
 	Cbuf recv_win;
 
