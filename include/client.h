@@ -7,6 +7,7 @@
 #include <string.h>
 #include <math.h>
 #include <pthread.h>
+#include <signal.h>
 // system headers
 #include <sys/types.h>
 #include <sys/socket.h>

@@ -271,7 +271,7 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 	/* Attempt to receive packet */
 	len = recv_pkt(stcp->sockfd, &data_pkt, 0);
 	if(len < 0) {
-		perror("stcp_client_recv: recv_pkt");
+		error("Server disconnected.\n");
 		rv = -1;
 	} else if(len == 0) {
 		fprintf(stderr, "stcp_connect: recv_pkt failed to read any data\n");
@@ -285,6 +285,7 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 		warn("Buffering data not implemented!\n");
 
 		/* init ACK packet */
+		/* TODO update stcp->next_seq */
 		build_pkt(&ack_pkt, 0,stcp->next_seq, RWIN_ADV(stcp->recv_win), STCP_ACK, NULL, 0);
 		info("Sending ACK: ");
 		print_hdr(&ack_pkt.hdr);

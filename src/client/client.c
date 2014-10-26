@@ -64,10 +64,16 @@ int main(int argc, char *argv[]) {
 	args.stcp = &stcp;
 	args.seed = config.seed;
 	args.mean = config.mean;
-	pthread_create(&ptid, &pattr, runConsumer, &args);
+	if((rv = pthread_create(&ptid, &pattr, runConsumer, &args) != 0)) {
+		error("pthread_create: %s\n", strerror(rv));
+		goto stcp_failure;
+	}
 	/* Start Producing  */
 	if(runProducer(&stcp) < 0) {
-		fprintf(stderr, "runProducer failed!\n");
+		error("Producer failed!\n");
+		if((rv = pthread_kill(ptid, SIGKILL) != 0)) {
+			error("pthread_kill: %s\n", strerror(rv));
+		}
 		goto stcp_failure;
 	}
 	/* wait for the consumer to finish reading all the data */
@@ -135,8 +141,9 @@ int runProducer(struct stcp_sock *stcp) {
 			return -1;
 		}
 		if (FD_ISSET(stcp->sockfd, &rset)) {
-			stcp_client_recv(stcp);
-
+			if(stcp_client_recv(stcp) < 0) {
+				return -1;
+			}
 			/* if is FIN, send ACK and break */
 		} else {
 			/* 30 second timeout reached on select and socket was not readable.
@@ -151,7 +158,6 @@ int runProducer(struct stcp_sock *stcp) {
 	}
 	return 0;
 }
-
 
 void *runConsumer(void *arg) {
 	struct consumer_args *args = arg;

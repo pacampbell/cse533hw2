@@ -221,14 +221,16 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 				debug("Read %d bytes from the file '%s'\n", read, file);
 				// Build the packet 
 				build_pkt(
-					pkt, 
-					0,
+					pkt,
 					pkt->hdr.seq + 1,
+					0,
 					process->interface_win_size,
 					0,
 					buffer,
 					read
 				);
+				debug("Sending data pkt: ");
+				print_hdr(&pkt->hdr);
 				// Send the packet
 				len = sendto_pkt(
 					sock,
@@ -247,14 +249,15 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 			// Send the fin packet
 			build_pkt(
 				pkt, 
-				0,
 				pkt->hdr.seq + 1,
+				0,
 				process->interface_win_size,
 				STCP_FIN,
 				NULL,
 				0
 			);
-
+			debug("Sending FIN pkt: ");
+			print_hdr(&pkt->hdr);
 			// Send the packet and see what happens
 			len = sendto_pkt(
 				sock,
