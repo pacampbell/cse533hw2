@@ -1,5 +1,7 @@
 #include "server.h"
 
+static Process *processes = NULL;
+
 int main(int argc, char *argv[]) {
 	char *path = "server.in";
 	Config config;
@@ -29,7 +31,7 @@ int main(int argc, char *argv[]) {
 void run(Interface *interfaces, Config *config) {
 	fd_set rset;
 	Interface *node;
-	Process *processes = NULL, *process = NULL;
+	Process *process = NULL;
 	int largest_fd = 0;
 	bool running = true;
 
@@ -122,8 +124,9 @@ void run(Interface *interfaces, Config *config) {
 
 int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 	// TODO: Add signal handler for sigchild, to remove process from process list
-	int pid = fork();
-	switch(pid) {
+	int pid;
+	signal(SIGCHLD, sigchld_handler);
+	switch(pid = fork()) {
 		case -1:
 			/* Failed */
 			error("Failed to fork child env.\n");
@@ -178,7 +181,7 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 			process->interface_win_size,
 			STCP_SYN | STCP_ACK,
 			&server_addr.sin_port,
-			sizeof(int)
+			sizeof(server_addr.sin_port)
 		);
 
 		// Send the packet and see what happens
@@ -191,7 +194,26 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 		);
 		
 		debug("Sent %d bytes to the client\n", sent);
+		// Log on the serer the error
+		if(sent < 0) {
+			error("Failed to send packet to %s:%d\n", process->ip_address, process->port);
+		}
 	} else {
 		error("Failed to create a socket.\n");
 	}
+}
+
+void sigchld_handler(int signum) {
+    pid_t pid;
+    Process *process = NULL;
+    while ((pid = waitpid(-1, NULL, WNOHANG)) != -1) {
+        process = get_process_by_pid(processes, pid);
+        if(process != NULL) {
+        	if(remove_process(&processes, process)) {
+        		info("Successfuly removed the process %d\n", (int)pid);
+        	}
+        } else {
+        	warn("Unable to find process with pid: %d\n", (int)pid);
+        }
+    }
 }

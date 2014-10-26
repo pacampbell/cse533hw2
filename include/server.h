@@ -45,4 +45,10 @@ int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt);
  */
 void childprocess(Process *process, struct stcp_pkt *pkt);
 
+/**
+ * Handles SIG_CHILD from forked processes. When this signal is
+ * received the process from the Processes list will be removed.
+ */
+void sigchld_handler(int signum);
+
 #endif
