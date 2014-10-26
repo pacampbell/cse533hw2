@@ -34,7 +34,7 @@ Process* get_process(Process *processes, const char *ipaddress, unsigned int por
 	if(processes != NULL) {
 		Process *node = processes;
 		while(node != NULL) {
-			if(strcmp(node->ip_address, ipaddress) && node->port == port) {
+			if(strcmp(node->ip_address, ipaddress) == 0 && node->port == port) {
 				found = node;
 				break;
 			}

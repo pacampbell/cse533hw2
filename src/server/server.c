@@ -61,11 +61,14 @@ void run(Interface *interfaces, Config *config) {
 				valid_pkt = recvfrom_pkt(node->sockfd, &pkt, 0, (struct sockaddr *)&connection_addr, &connection_len);
 				if(valid_pkt < 0) {
 					/* Error on recv system call */
-					error("recvfrom: %s\n", strerror(errno));
-					//TODO: What do here? Return? exit failure?
+					if(errno != EINTR){
+						error("recvfrom: %s\n", strerror(errno));
+						//TODO: What do here? exit failure? ignore?
+					}
 				} else if(valid_pkt == 0) {
 					debug("Ignoring message: too small to be STCP packet.\n");
 				} else {
+					// Packet was valid
 					// Check if process already exists for child
 					if((process = get_process(processes, node->ip_address, connection_addr.sin_port)) == NULL) {
 						// Process doesn't exist so create a new one
@@ -73,10 +76,11 @@ void run(Interface *interfaces, Config *config) {
 						Process *new_process = malloc(sizeof(Process));
 						if(new_process != NULL) {
 							char buffer[SERVER_BUFFER_SIZE];
+							int pid;
 							/* Convert client ipaddress to string */
 							inet_ntop(AF_INET, &(connection_addr.sin_addr), buffer, INET_ADDRSTRLEN);
 							/* Process fields */
-							new_process->pid = 0; 
+							new_process->pid = 0;
 							/* Client Fields */
 							new_process->port = connection_addr.sin_port;
 							strcpy(new_process->ip_address, buffer);
@@ -91,7 +95,14 @@ void run(Interface *interfaces, Config *config) {
 							// Add the process to the list
 							add_process(&processes, new_process);
 							// Fork a new child
-							spawnchild(interfaces, new_process);
+							pid = spawnchild(interfaces, new_process);
+							if(pid == -1 || pid == 0) {
+								// Either fork failed or we are in the child process
+								// Set running to false and break out of this loop
+								info("Child process has finished; pid = %d\n", pid);
+								running = false;
+								break;
+							}
 						} else {
 							error("CRITICAL ERROR: Unable to allocate memory for a new process.\n");
 						}
@@ -108,7 +119,7 @@ void run(Interface *interfaces, Config *config) {
 	destroy_processes(&processes);
 }
 
-void spawnchild(Interface *interfaces, Process *process) {
+int spawnchild(Interface *interfaces, Process *process) {
 	int pid = fork();
 	switch(pid) {
 		case -1:
@@ -117,15 +128,17 @@ void spawnchild(Interface *interfaces, Process *process) {
 			break;
 		case 0:
 			/* In child */
-			info("Child has started!\n");
+			info("Server Child - started!\n");
 			// TODO: Close connection to other interfaces
 			childprocess(process);
 			break;
 		default:
 			/* In parent */
 			process->pid = pid;
+			info("Main Server - Child PID: %d\n", pid);
 			break;
 	}
+	return pid;
 }
 
 void childprocess(Process *process) {
