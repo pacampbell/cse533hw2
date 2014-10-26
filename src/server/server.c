@@ -58,7 +58,6 @@ void run(Interface *interfaces, Config *config) {
 		while(node != NULL) {
 			if(FD_ISSET(node->sockfd, &rset)) {
 				struct stcp_pkt pkt;
-				// START HERE: check if process already exists, fork child, Check for same subnet, create new out of band socket, etc.
 				debug("Detected connection on interface: <%s> %s\n", node->name, node->ip_address);
 				valid_pkt = recvfrom_pkt(node->sockfd, &pkt, 0, (struct sockaddr *)&connection_addr, &connection_len);
 				if(valid_pkt < 0) {
@@ -102,7 +101,7 @@ void run(Interface *interfaces, Config *config) {
 							if(pid == -1 || pid == 0) {
 								// Either fork failed or we are in the child process
 								// Set running to false and break out of this loop
-								info("Child process has finished; pid = %d\n", pid);
+								info("Child process has finished; pid = %d\n", getpid());
 								running = false;
 								break;
 							}
@@ -133,7 +132,7 @@ int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 			break;
 		case 0:
 			/* In child */
-			info("Server Child - started!\n");
+			info("Server Child - PID: %d\n", getpid());
 			// TODO: Close connection to other interfaces
 			// other FDs, etc.
 			childprocess(process, pkt);
@@ -148,65 +147,131 @@ int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 }
 
 void childprocess(Process *process, struct stcp_pkt *pkt) {
-	int sock = 0;
-	bool samesub = false;
-	struct stcp_pkt ack;
-	struct sockaddr_in client_addr, server_addr;
-	// Zero out memory
-	memset((char *)&client_addr, 0, sizeof(client_addr));
-	memset((char *)&server_addr, 0, sizeof(server_addr));
-	// Set client fields
-	client_addr.sin_family = AF_INET;
-	client_addr.sin_port = process->port;
-	inet_aton(process->ip_address, &client_addr.sin_addr);
-	// Set server fields
-	server_addr.sin_family = AF_INET;
-	server_addr.sin_port = htons(0);
-	inet_aton(process->interface_ip_address, &server_addr.sin_addr);
-
-	// Attach socket depending on if local or not
-	samesub = isSameSubnet(process->interface_ip_address, 
-						   process->ip_address, 
-						   process->interface_network_mask);
-	// Create socketfd
-	sock = createClientSocket(&client_addr, &server_addr, samesub);
-
-	// Send SYN | ACK for new socket
-	if(sock >= 0) {
-		int len = 0;
-		// Set up packet data
-		build_pkt(
-			pkt, 
-			0,
-			pkt->hdr.seq + 1,
-			process->interface_win_size,
-			STCP_SYN | STCP_ACK,
-			&server_addr.sin_port,
-			sizeof(server_addr.sin_port)
-		);
-
-		// Send the packet and see what happens
-		len = sendto_pkt(
-			process->interface_fd,
-			pkt,
-			0,
-			(struct sockaddr*)&client_addr,
-			sizeof(client_addr)
-		);
+	char file[1024];
+	// Extract file name
+	strncpy(file, pkt->data, pkt->dlen);
+	file[pkt->dlen] = '\0';
+	info("Searching for file: '%s'\n", file);
+	// Attempt to open the file
+	FILE *fp = fopen(file, "r");
+	if(fp != NULL) {
+		int sock = 0;
+		int read = 0;
+		bool samesub = false;
+		struct stcp_pkt ack;
+		struct sockaddr_in client_addr, server_addr;
+		char buffer[STCP_MAX_DATA];
 		
-		debug("Sent %d bytes to the client\n", len);
-		// Log on the serer the error
-		if(len < 0) {
-			error("Failed to send packet to %s:%d\n", process->ip_address, process->port);
+		// Zero out memory
+		memset((char *)&client_addr, 0, sizeof(client_addr));
+		memset((char *)&server_addr, 0, sizeof(server_addr));
+		
+		// Set client fields
+		client_addr.sin_family = AF_INET;
+		client_addr.sin_port = process->port;
+		inet_aton(process->ip_address, &client_addr.sin_addr);
+		
+		// Set server fields
+		server_addr.sin_family = AF_INET;
+		server_addr.sin_port = htons(0);
+		inet_aton(process->interface_ip_address, &server_addr.sin_addr);
+
+		// Attach socket depending on if local or not
+		samesub = isSameSubnet(process->interface_ip_address, 
+							   process->ip_address, 
+							   process->interface_network_mask);
+		// Create socketfd
+		sock = createClientSocket(&client_addr, &server_addr, samesub);
+
+		// Send SYN | ACK for new socket
+		if(sock >= 0) {
+			int len = 0;
+			// Set up packet data
+			build_pkt(
+				pkt, 
+				0,
+				pkt->hdr.seq + 1,
+				process->interface_win_size,
+				STCP_SYN | STCP_ACK,
+				&server_addr.sin_port,
+				sizeof(server_addr.sin_port)
+			);
+
+			// Send the packet and see what happens
+			len = sendto_pkt(
+				process->interface_fd,
+				pkt,
+				0,
+				(struct sockaddr*)&client_addr,
+				sizeof(client_addr)
+			);
+			
+			debug("Sent %d bytes to the client\n", len);
+			// Log on the serer the error
+			if(len < 0) {
+				error("Failed to send packet to %s:%d\n", process->ip_address, process->port);
+			}
+			/* Wait for client's ACK */
+			/* TODO: validate ACK */
+			recv_pkt(sock, &ack, 0);
+			debug("Received pkt from client ");
+			print_hdr(&ack.hdr);
+			/* Connection established start sending file */
+			while((read = fread(buffer, sizeof(unsigned char), STCP_MAX_DATA, fp)) > 0) {
+				debug("Read %d bytes from the file '%s'\n", read, file);
+				// Build the packet 
+				build_pkt(
+					pkt, 
+					0,
+					pkt->hdr.seq + 1,
+					process->interface_win_size,
+					0,
+					buffer,
+					read
+				);
+				// Send the packet
+				len = sendto_pkt(
+					process->interface_fd,
+					pkt,
+					0,
+					(struct sockaddr*)&client_addr,
+					sizeof(client_addr)
+				);
+				// If the read length and the sent length are not the same
+				// Something probably went wrong
+				if(read != (len - sizeof(pkt->hdr))) {
+					error("Read len = %d, Sent len = %d (they should match)\n", read, (len - (int)sizeof(pkt->hdr)));
+					break;
+				}
+			}
+			// Send the fin packet
+			build_pkt(
+				pkt, 
+				0,
+				pkt->hdr.seq + 1,
+				process->interface_win_size,
+				STCP_FIN,
+				NULL,
+				0
+			);
+
+			// Send the packet and see what happens
+			len = sendto_pkt(
+				process->interface_fd,
+				pkt,
+				0,
+				(struct sockaddr*)&client_addr,
+				sizeof(client_addr)
+			);
+			// Alert the user that fin was sent
+			debug("Sent fin packet - %d bytes.\n", len);
+		} else {
+			error("Failed to create a socket.\n");
 		}
-		/* Wait for client's ACK */
-		/* TODO: validate ACK */
-		recv_pkt(sock, &ack, 0);
-		debug("Received pkt from client ");
-		print_hdr(&ack.hdr);
-		/* Connection established start sending file */
+		/* Close the opened file */
+		fclose(fp);
 	} else {
-		error("Failed to create a socket.\n");
+		warn("The file '%s' does not exist on the server.\n", file);
 	}
 }
 
