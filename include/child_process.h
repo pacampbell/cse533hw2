@@ -50,6 +50,14 @@ bool remove_process(Process **processes, Process *process);
 Process* get_process(Process *processes, const char *ipaddress, unsigned int port);
 
 /**
+ * Gets a process in the process list by pid, if it exists.
+ * @param processes List containing all processes.
+ * @param pid PID of the process to search for.
+ * @return Returns the process if found, else NULL.
+ */
+Process* get_process_by_pid(Process *processes, pid_t pid);
+
+/**
  * Frees all memory from the process list.
  * @param processes List containing all processes.
  */
