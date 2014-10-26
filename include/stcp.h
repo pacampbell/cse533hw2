@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -62,7 +63,7 @@ typedef struct {
 struct stcp_sock {
 	int sockfd;			/* The connected UDP socket */
 	/* TODO: MUTEX for concurrent producer/consumer access */
-
+	pthread_mutex_t mutex;
 	/* For Receiving */
 	uint32_t next_seq;	/* Sequence Number we expect to recv next */
 	Cbuf recv_win;
@@ -133,6 +134,13 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
  * @param sock A stcp_sock initialized by the client for reading.
  */
 int stcp_client_recv(struct stcp_sock *sock);
+
+/*
+ * Read from the buffer and print to stdout.
+ *
+ * @param sock A stcp_sock initialized by the client for reading.
+ */
+int stcp_client_read(struct stcp_sock *sock);
 
 /**
  * Wrappers for send functions.
