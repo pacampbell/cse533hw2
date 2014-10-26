@@ -18,9 +18,9 @@
 #include "debug.h"
 
 struct consumer_args {
-    struct stcp_sock *stcp;
-    unsigned int seed;
-    unsigned int mean;
+	struct stcp_sock *stcp;
+	unsigned int seed;
+	unsigned int mean;
 };
 
 /**

@@ -7,16 +7,16 @@ int main(int argc, char *argv[]) {
 	struct sockaddr_in serv_addr, client_addr;
 	struct stcp_sock stcp;
 	bool local;
-    /* pthread variables */
-    struct consumer_args args;
-    pthread_t ptid;
-    pthread_attr_t pattr;
-    // Init pthread attributes
-    if((rv = pthread_attr_init(&pattr))) {
-        errno = rv;
-        perror("main: pthread_attr_init");
-        exit(EXIT_FAILURE);
-    }
+	/* pthread variables */
+	struct consumer_args args;
+	pthread_t ptid;
+	pthread_attr_t pattr;
+	// Init pthread attributes
+	if((rv = pthread_attr_init(&pattr))) {
+		errno = rv;
+		perror("main: pthread_attr_init");
+		exit(EXIT_FAILURE);
+	}
 
 	/* Zero out the structs */
 	memset(&serv_addr, 0, sizeof(serv_addr));
@@ -51,45 +51,45 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr, "stcp_socket failed\n");
 		exit(EXIT_FAILURE);
 	}
-    /* Try to establish a connection to the server */
-    if(stcp_connect(&stcp, &serv_addr, config.filename) < 0) {
-        /* Unable to connect to server  */
-        fprintf(stderr, "Handshake failed with server @ %s port %hu\n",
+	/* Try to establish a connection to the server */
+	if(stcp_connect(&stcp, &serv_addr, config.filename) < 0) {
+		/* Unable to connect to server  */
+		fprintf(stderr, "Handshake failed with server @ %s port %hu\n",
 			inet_ntoa(config.serv_addr), config.port);
-        goto stcp_failure;
-    }
-    printf("Connection established. Starting producer and consumer threads.");
-    /* Start the consumer thread */
-    /* Both threads use the same stcp structure */
-    args.stcp = &stcp;
-    args.seed = config.seed;
-    args.mean = config.mean;
-    pthread_create(&ptid, &pattr, runConsumer, &args);
-    /* Start Producing  */
-    if(runProducer(&stcp) < 0) {
-        fprintf(stderr, "runProducer failed!");
-        goto stcp_failure;
-    }
-    /* wait for the consumer to finish reading all the data */
-    /* NULL so dont recv exit status */
-    if((rv = pthread_join(ptid, NULL)) < 0) {
-        errno = rv;
-        perror("main: pthread_join");
-        goto stcp_failure;
-    }
-    printf("Consumer thread joined");
-    /* close the STCP socket */
-    if(stcp_close(&stcp) < 0) {
-        perror("main: stcp_close");
-        exit(EXIT_FAILURE);
-    }
-    /* destroy pthread attributes */
-    if(pthread_attr_destroy(&pattr)) {
-        perror("main: pthread_attr_destroy");
-        exit(EXIT_FAILURE);
-    }
-    return EXIT_SUCCESS;
-    stcp_failure:
+		goto stcp_failure;
+	}
+	info("Connection established. Starting producer and consumer threads.\n");
+	/* Start the consumer thread */
+	/* Both threads use the same stcp structure */
+	args.stcp = &stcp;
+	args.seed = config.seed;
+	args.mean = config.mean;
+	pthread_create(&ptid, &pattr, runConsumer, &args);
+	/* Start Producing  */
+	if(runProducer(&stcp) < 0) {
+		fprintf(stderr, "runProducer failed!\n");
+		goto stcp_failure;
+	}
+	/* wait for the consumer to finish reading all the data */
+	/* NULL so dont recv exit status */
+	if((rv = pthread_join(ptid, NULL)) < 0) {
+		errno = rv;
+		perror("main: pthread_join");
+		goto stcp_failure;
+	}
+	printf("Consumer thread joined");
+	/* close the STCP socket */
+	if(stcp_close(&stcp) < 0) {
+		perror("main: stcp_close");
+		exit(EXIT_FAILURE);
+	}
+	/* destroy pthread attributes */
+	if(pthread_attr_destroy(&pattr)) {
+		perror("main: pthread_attr_destroy");
+		exit(EXIT_FAILURE);
+	}
+	return EXIT_SUCCESS;
+	stcp_failure:
 	/* close the STCP socket */
 	if(stcp_close(&stcp) < 0) {
 		perror("main: stcp_close");
@@ -117,54 +117,64 @@ bool chooseIPs(Config *config, struct in_addr *server_ip,
 }
 
 int runProducer(struct stcp_sock *stcp) {
-    /* select stuff */
-    struct timeval tv;
-    int nfds;
-    fd_set rset;
+	/* select stuff */
+	struct timeval tv;
+	long timeout = 30; /* lets use a 30 second timeout */
+	int nfds;
+	fd_set rset;
 
-    /* Set the timeout */
-    while(1) {
-        tv.tv_sec = 1;
-        tv.tv_usec = 0;
-        FD_ZERO(&rset);
-        FD_SET(stcp->sockfd, &rset);
-        nfds = stcp->sockfd + 1;
-        if (select(nfds, &rset, NULL, NULL, &tv) < 0) {
-            perror("stcp_connect: select");
-            return -1;
-        }
-        if (FD_ISSET(stcp->sockfd, &rset)) {
-            printf("Must call recv_send_ack.\n");
-            /* if is FIN, send ACK and break */
-        } else {
-            /* timeout reached on select */
-            printf("Producer select timeout.\n");
-        }
-    }
-    return 0;
+	/* Set the timeout */
+	while(1) {
+		tv.tv_sec = timeout;
+		tv.tv_usec = 0;
+		FD_ZERO(&rset);
+		FD_SET(stcp->sockfd, &rset);
+		nfds = stcp->sockfd + 1;
+		if (select(nfds, &rset, NULL, NULL, &tv) < 0) {
+			perror("stcp_connect: select");
+			return -1;
+		}
+		if (FD_ISSET(stcp->sockfd, &rset)) {
+			printf("Must call recv_send_ack.\n");
+
+			stcp_client_recv(stcp);
+
+			/* if is FIN, send ACK and break */
+		} else {
+			/* 30 second timeout reached on select and socket was not readable.
+			 * If this happens we assume the server crashed or the network is down.
+			 * TODO: Ask Badr about this case. He said we should only have one
+			 *       timeout on the client side, but it seems silly to hang forever.
+			 */
+			error("Producer timed out after %ld seconds without receiving data\n", timeout);
+			printf("Producer timed out after %ld seconds without receiving data\n", timeout);
+			return -1;
+		}
+	}
+	return 0;
 }
 
 
 void *runConsumer(void *arg) {
-    struct consumer_args *args = arg;
+	struct consumer_args *args = arg;
   //  struct stcp_sock *stcp = args->stcp;
-    unsigned int ms;
-    /* set the seed for our uniform uniformly distributed RNG */
-    srand48(args->seed);
-    while(1) {
-        ms = sampleExpDist(args->mean);
-        debug("Consumer: sleeping for %u ms\n", ms);
-        if(usleep(ms * 1000) < 0) {
-            perror("runConsumer: usleep");
-        }
-        /* Wake up and read from buffer */
-    }
+	unsigned int ms;
+	/* set the seed for our uniform uniformly distributed RNG */
+	srand48(args->seed);
+	while(1) {
+		ms = sampleExpDist(args->mean);
+		debug("Consumer: sleeping for %u ms\n", ms);
+		if(usleep(ms * 1000) < 0) {
+			perror("runConsumer: usleep");
+		}
+		/* Wake up and read from buffer */
+	}
 	return 0;
 }
 
 
 unsigned int sampleExpDist(unsigned int mean) {
-    unsigned int usecs;
-    usecs = mean * (-1 * log(drand48()));
-    return usecs;
+	unsigned int usecs;
+	usecs = mean * (-1 * log(drand48()));
+	return usecs;
 }
