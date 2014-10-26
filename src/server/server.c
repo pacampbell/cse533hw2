@@ -89,6 +89,7 @@ void run(Interface *interfaces, Config *config) {
 						if(pid == -1 || pid == 0) {
 							// Either fork failed or we are in the child process
 							// Set running to false and break out of this loop
+							info("Child process has finished; pid = %d\n", pid);
 							running = false;
 							break;
 						}
@@ -137,13 +138,14 @@ int spawnchild(Interface *interfaces, Process *process) {
 			break;
 		case 0:
 			/* In child */
-			info("Child has started!\n");
+			info("Server Child - started!\n");
 			// TODO: Close connection to other interfaces
 			childprocess(process);
 			break;
 		default:
 			/* In parent */
 			process->pid = pid;
+			info("Main Server - Child PID: %d\n", pid);
 			break;
 	}
 	return pid;
