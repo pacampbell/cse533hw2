@@ -47,10 +47,10 @@ Process* get_process(Process *processes, const char *ipaddress, unsigned int por
 }
 
 static void _destroy_processes(Process *processes) {
-	error("Fuction not implemented.\n");
+	warn("Fuction '_destroy_processes' not implemented.\n");
 }
 
 void destroy_processes(Process **processes) {
-	error("Fuction not implemented.\n");
+	warn("Fuction 'destroy_processes' not implemented.\n");
 	_destroy_processes(*processes);
 }
