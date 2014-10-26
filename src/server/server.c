@@ -231,7 +231,7 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 				);
 				// Send the packet
 				len = sendto_pkt(
-					process->interface_fd,
+					sock,
 					pkt,
 					0,
 					(struct sockaddr*)&client_addr,
@@ -257,7 +257,7 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 
 			// Send the packet and see what happens
 			len = sendto_pkt(
-				process->interface_fd,
+				sock,
 				pkt,
 				0,
 				(struct sockaddr*)&client_addr,
