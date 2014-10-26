@@ -8,6 +8,9 @@
 #include "debug.h"
 #include "unpifiplus.h"
 
+#define BIND_INTERFACE 1
+#define DONT_BIND_INTERFACE 0
+
 /**
  * Container used for holding information
  * about an interface.
@@ -40,9 +43,11 @@ bool remove_node(Interface **list, Interface *node);
 
 /**
  * Discovers unicast interfaces on the system.
+ * @param config Configuration containing port number to use.
+ * @param shouldBind Tells the function to bind to discovered interfaces.
  * @return Returns all the unicast interfaces on the system.
  */
-Interface*  discoverInterfaces();
+Interface*  discoverInterfaces(Config *config, bool shouldBind);
 
 /**
  * Checks to see if two ipaddresses are part of the same subnet.
@@ -52,5 +57,12 @@ Interface*  discoverInterfaces();
  * @return Returns true if the same subnet, else false.
  */
 bool isSameSubnet(const char *server_ip, const char *client_ip, const char *network_mask);
+
+/**
+ * Calculates the size of the interface.
+ * @param interfaces List containing all the network interfaces.
+ * @return Return returns the size of the interfaces list. 
+ */
+unsigned int size(Interface *interfaces);
 
 #endif
