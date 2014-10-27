@@ -419,3 +419,86 @@ int recv_pkt(int sockfd, struct stcp_pkt *pkt, int flags) {
 	}
 	return rv;
 }
+
+/*
+ * Start Circle Buffer Functions
+ */
+
+int win_count(Window *win) {
+	return win->count;
+}
+
+int win_available(Window *win) {
+	/* Number of empty elems in the buffer */
+	return (win->size - win->count);
+}
+
+int win_full(Window *win) {
+	return (win->count == win->size);
+}
+
+int win_empty(Window *win) {
+	return (win->count == 0);
+}
+
+Elem *win_add(Window *win, Elem *elem) {
+	Elem *added = NULL;
+
+	if(win_full(win)) {
+		debug("Tried to add elem when the Window was full!\n");
+	} else {
+		/* Copy the elem into the ending index and mark it as valid */
+		added = &win->buf[win->end];
+		memcpy(added, elem, sizeof(Elem));
+		elem->valid = 1;
+		/* Advance the end index and increment our elem count */
+		win->count += 1;
+		win->end = (win->end + 1) % win->size;
+	}
+	return added;
+}
+
+void win_remove(Window *win) {
+	/* remove the oldest elem in the window */
+	if(win_empty(win)) {
+		debug("Tried to remove elem when the Window was empty!\n");
+	} else {
+		/* Remove the elem at the start */
+		win->buf[win->start].valid = 0;
+		/* Advance the start index and decrement count */
+		win->count -= 1;
+		win->start = (win->start + 1) % win->size;
+	}
+}
+
+Elem *win_oldest(Window *win) {
+	Elem *oldest = NULL;
+	if(win_empty(win)) {
+		debug("Tried to get an elem when the Window was empty!\n");
+	} else {
+		/* Copy the elem into the ending index and mark it as valid */
+		oldest = &win->buf[win->start];
+	}
+	return oldest;
+}
+
+void win_clear(Window *win) {
+	/* remove everything from the window */
+	while(!win_empty(win)) {
+		win_remove(win);
+	}
+}
+
+/**
+ * Functions only for sender side
+ */
+
+int win_send_limit(Window *win) {
+	/* minimum of cwin, receiver advertised win, sender available window */
+	int avail = win_available(win);
+	if(win->cwin < avail) {
+		return (win->cwin < win->rwin_adv)? win->cwin : win->rwin_adv;
+	} else {
+		return (avail < win->rwin_adv)? avail : win->rwin_adv;
+	}
+}
