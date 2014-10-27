@@ -112,20 +112,60 @@ int main(int argc, char *argv[]) {
 
 bool chooseIPs(Config *config, struct in_addr *server_ip,
 				struct in_addr *client_ip) {
-	bool local = true;
-	/* TODO: call get_ifi_info_plus */
+	bool local = false;
+	Interface *interfaces = NULL;
+	Interface *temp = NULL;
+	/* Get a list of our interfaces */
+	interfaces = discoverInterfaces(NULL, DONT_BIND_INTERFACE);
+	if(!size(interfaces)) {
+		error("No interfaces were found. Aborting program.\n");
+		destroy_interfaces(&interfaces);
+		exit(EXIT_FAILURE);
+	}
+	/* TODO: check if we match the server's address exactly */
+	for(temp = interfaces; temp != NULL; temp = temp->next) {
+		if(isSameIP(config->serv_addr, temp->ip_address)) {
+			local = true;
+			/* Set both IP's to 127.0.0.1 */
+			info("Client and server share the same IP: %s\n", temp->ip_address);
+			client_ip->s_addr = htonl(INADDR_LOOPBACK);
+			server_ip->s_addr = htonl(INADDR_LOOPBACK);
+			break;
+		}
+	}
+	if(!local) {
+		unsigned long longest = 0; /* longest matching network mask in network order */
+		server_ip->s_addr = config->serv_addr.s_addr;
+		/* Chose longest prefix */
+		for(temp = interfaces; temp != NULL; temp = temp->next) {
+			struct in_addr temp_ip, mask_ip;
+			unsigned long ip_add, net_mask;
+			inet_aton(temp->ip_address, &temp_ip);
+			inet_aton(temp->network_mask, &mask_ip);
+			ip_add = temp_ip.s_addr;
+			net_mask = mask_ip.s_addr;
 
-	/* TODO: check if we match the server's address */
+			if((ip_add & net_mask) == (server_ip->s_addr & net_mask)) {
+				/* Server IP and this interface IP are on the same subnet */
+				info("Client and server share subnet IP: %s\n", temp->ip_address);
+				local = true;
+				if(ntohl(net_mask) > ntohl(longest)) {
+					longest = net_mask;
+					client_ip->s_addr = ip_add;
+				}
+			}
+		}
+		if(!local) {
+			/* If NONE of the interfaces were local choose first IP */
+			inet_aton(interfaces->ip_address, client_ip);
+		}
+	}
 
-	/* TODO: Else use the longest match */
-	/* For now just set server_ip to the config */
-	server_ip->s_addr = config->serv_addr.s_addr;
-	/* TODO: Else choose first IP from ifi_info */
-	/* for now just set client_ip to loopback address */
-	client_ip->s_addr = htonl(INADDR_LOOPBACK);
+	info("Server address %s local. IPserver: %s, IPclient %s\n",
+		local? "is":"is NOT", inet_ntoa(*server_ip),inet_ntoa(*client_ip));
 
-	printf("Server address is local. IPserver: %s, IPclient %s\n",
-		inet_ntoa(*server_ip),inet_ntoa(*client_ip));
+	/* Clean up memory */
+	destroy_interfaces(&interfaces);
 	return local;
 }
 

@@ -146,16 +146,16 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 	/* attempt to connect backed by timeout */
 	while (1) {
 		if(sendSYN) {
-			printf("Sending connection request with %u second timeout\n", (uint32_t)tv.tv_sec);
+			info("Sending connection request with %u second timeout\n", (uint32_t)tv.tv_sec);
 			/* send first SYN containing the filename in the data field */
 			printf("SYN pkt:");
 			print_hdr(&sent_pkt.hdr);
 			len = send_pkt(sock->sockfd, &sent_pkt, 0);
 			if(len < 0) {
-				perror("stcp_connect: send_pkt");
+				error("Sending SYN packet: %s\n", strerror(errno));
 				return -1;
 			} else if(len == 0) {
-				fprintf(stderr, "stcp_connect: send_pkt failed to write any data\n");
+				error("Sending SYN packet: failed to write any data\n");
 				return -1;
 			}
 		}
@@ -163,17 +163,14 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 		FD_SET(sock->sockfd, &rset);
 		nfds = sock->sockfd + 1;
 		if(select(nfds, &rset, NULL, NULL, &tv) < 0) {
-			perror("stcp_connect: select");
+			error("Select: %s", strerror(errno));
 			return -1;
 		}
 		if(FD_ISSET(sock->sockfd, &rset)) {
 			/* Read response from server */
 			len = recv_pkt(sock->sockfd, &reply_pkt, 0);
 			if(len < 0) {
-				perror("stcp_connect: recv_pkt");
-				return -1;
-			} else if(len == 0) {
-				fprintf(stderr, "stcp_connect: recv_pkt failed to read any data\n");
+				error("Receiving SYN+ACK packet: %s\n", strerror(errno));
 				return -1;
 			}
 			/* parse the new port from the server */
@@ -184,7 +181,7 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 				uint16_t *p = (uint16_t *)reply_pkt.data;
 				/* port should be the only 2 bytes of data in host order */
 				newport = ntohs(*p);
-				info("New port received: %hu\n", newport);
+				info("Received SYN+ACK with new port: %hu\n", newport);
 				/* update the initial seq */
 				sock->win.next_seq = reply_pkt.hdr.seq + 1;
 				/* break out out the loop */
@@ -217,15 +214,15 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 	}
 	/* init ACK packet */
 	build_pkt(&ack_pkt, 0, sock->win.next_seq, WIN_ADV(sock->win), STCP_ACK, NULL, 0);
-	printf("Sending ACK to server ");
+	debug("Sending ACK to server ");
 	print_hdr(&ack_pkt.hdr);
 	/* Send ACK packet to server */
 	len = send_pkt(sock->sockfd, &ack_pkt, 0);
 	if(len < 0) {
-		perror("stcp_connect: send_pkt");
+		error("Sending ACK packet: %s\n", strerror(errno));
 		return -1;
 	} else if(len == 0) {
-		fprintf(stderr, "stcp_connect: send_pkt failed to write any data\n");
+		error("Sending ACK packet: failed to write any data\n");
 		return -1;
 	}
 	return 0;
@@ -348,7 +345,7 @@ int stcp_client_read(struct stcp_sock *stcp) {
 			/* check if the pkt was a FIN */
 			if(elem->pkt.hdr.flags & STCP_FIN) {
 				printf("\n");
-				info("Consumer read end of file data. Ending...\n");
+				info("Consumer read EOF. Ending...\n");
 				done = 1;
 				break;
 			} else {

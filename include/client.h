@@ -15,6 +15,8 @@
 #include <netdb.h>
 // Program headers
 #include "stcp.h"
+#include "interfaces.h"
+#include "unpifiplus.h"
 #include "utility.h"
 #include "debug.h"
 
@@ -29,7 +31,7 @@ struct consumer_args {
  * If the address is on the same host then both IP's are set to 127.0.0.1
  * Otherwise server_ip is set to the config value and we check if one of our
  * interfaces is local. client_ip is set to the longest prefix matching IP.
- * If non are local we choose and arbitrary address for the client.
+ * If none are local we choose any address from the client's interface list.
  *
  * @param config     The config from client.in
  * @param server_ip  The IP of the server

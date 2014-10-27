@@ -20,7 +20,6 @@ typedef struct _Interface {
 	char name[INTERFACES_BUFFER];
 	char ip_address[INTERFACES_BUFFER];
 	char network_mask[INTERFACES_BUFFER];
-	char subnet_address[INTERFACES_BUFFER];
 	struct _Interface *next;
 	struct _Interface *prev;
 } Interface;
@@ -57,6 +56,14 @@ Interface*  discoverInterfaces(Config *config, bool shouldBind);
  * @return Returns true if the same subnet, else false.
  */
 bool isSameSubnet(const char *server_ip, const char *client_ip, const char *network_mask);
+
+/**
+ * Checks to see if two ipaddresses are exactly the same.
+ * @param serv_addr Ipaddress of the server.
+ * @param client_ip Ipaddress of the client as string
+ * @return Returns true if they match, else false.
+ */
+bool isSameIP(struct in_addr serv_addr, const char *client_ip);
 
 /**
  * Calculates the size of the interface.
