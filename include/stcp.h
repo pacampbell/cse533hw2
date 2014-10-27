@@ -47,6 +47,7 @@ typedef struct {
 	struct stcp_pkt pkt;	/* Packet to buffer */
 	/* stuff only for sending window element */
 	/* TODO: add rtt_info and other stuff */
+	int ack_count;		/* NUmber of ACK received with this seq #, for fast retransimit */
 } Elem;
 
 /* STCP sliding window */
@@ -60,20 +61,19 @@ typedef struct {
 	uint32_t next_seq;	/* Sequence Number we expect to recv next */
 	/* stuff specifically for sending window */
 	uint32_t next_ack;	/* Acknowledgement Number we expect to recv next */
-} Cbuf;
+	/* For Sending */
+	uint16_t rwin_adv;	/* Last seen window size from a reciever ACK */
+	uint16_t cwin;		/* Congestion window value */
+	uint16_t ssthresh;	/* Slow Start Threshhold */
+	// TODO: other shit for sending
+} Window;
 
 /* This will be the 'new socket' used to send and recv segments */
 struct stcp_sock {
 	int sockfd;			/* The connected UDP socket */
-	Cbuf win;
-
+	Window win;
 	/* For Receiving */
 	pthread_mutex_t mutex;
-
-	/* For Sending */
-	uint16_t cwin;		/* Congestion window value */
-	uint16_t ssthresh;	/* Slow Start Threshhold */
-	// TODO: other shit for sending
 };
 
 
@@ -86,14 +86,14 @@ void build_pkt(struct stcp_pkt *pkt, uint32_t seq, uint32_t ack, uint16_t win,
 		uint16_t flags, void *data, int dlen);
 
 /**
-* Test if a packet is a valid SYN ACK in response to a SYN. SYN and ACK
-* flags should be set, ack # should be sent_seq + 1, and data field
-* should contain a port.
-*
-* @param pkt The received pkt in host order
-* @param sent_seq The starting sequence number we sent in our SYN
-* @return 1 if valid, 0 if invalid
-*/
+ * Test if a packet is a valid SYN ACK in response to a SYN. SYN and ACK
+ * flags should be set, ack # should be sent_seq + 1, and data field
+ * should contain a port.
+ *
+ * @param pkt The received pkt in host order
+ * @param sent_seq The starting sequence number we sent in our SYN
+ * @return 1 if valid, 0 if invalid
+ */
 int _valid_SYNACK(struct stcp_pkt *pkt, uint32_t sent_seq);
 
 /*
@@ -154,13 +154,13 @@ int send_pkt(int sockfd, struct stcp_pkt *pkt, int flags);
 int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 		struct sockaddr *dest_addr, socklen_t addrlen);
 /**
-* Wrappers for recv functions. Differs in the return value (see below)
-*
-* @param pkt Will be returned in host order
-* @return -1: on system call error, check errno
-*          0: if the packet is too small
-*         >0: if packet is valid
-*/
+ * Wrappers for recv functions. Differs in the return value (see below)
+ *
+ * @param pkt Will be returned in host order
+ * @return -1: on system call error, check errno
+ *          0: if the packet is too small
+ *         >0: if packet is valid
+ */
 int recv_pkt(int sockfd, struct stcp_pkt *pkt, int flags);
 int recvfrom_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 		struct sockaddr *src_addr, socklen_t *addrlen);
@@ -171,5 +171,67 @@ int recvfrom_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
  */
 
 #define WIN_ADV(win) ((win).size - (win).count)
+
+/**
+ * Number of elements inside the window.
+ * @param win The Window
+ * @return Window Elem count
+ */
+int win_count(Window *win);
+
+/**
+ * Number of free elements in the window.
+ * @param win The Window
+ * @return Window free element count
+ */
+int win_available(Window *win);
+
+/**
+ * If the window is currently full
+ * @param win The Window
+ * @return 1 if full, 0 otherwise
+ */
+int win_full(Window *win);
+
+/**
+ * If the window is currently empty
+ * @param win The Window
+ * @return 1 if empty, 0 otherwise
+ */
+int win_empty(Window *win);
+
+/**
+ * Appends the Elem pointed to by elem to the Window win. A reference to the
+ * added Elem inside the Window is returned. Or NULL if the window was full.
+ * @param win  The Window
+ * @param elem The Elem to append to the window
+ * @return pointer to the added elem, or NULL if the window was full.
+ */
+Elem *win_add(Window *win, Elem *elem);
+
+/**
+ * Returns the oldest elem inside the Window win. Or NULL if the window was empty.
+ * @param win  The Window
+ * @return pointer to the oldest elem, or NULL if the window was empty.
+ */
+Elem *win_oldest(Window *win);
+
+/**
+ * Removes the oldest Elem inside the Window win.
+ * @param win  The Window
+ */
+void win_remove(Window *win);
+
+/**
+ * Removes all the elements from the Window win.
+ * @param win  The Window to clear
+ */
+void win_clear(Window *win);
+
+/**
+ * Functions only for sender side
+ */
+
+int win_send_limit(Window *win);
 
 #endif
