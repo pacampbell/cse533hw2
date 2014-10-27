@@ -160,9 +160,9 @@ bool chooseIPs(Config *config, struct in_addr *server_ip,
 			inet_aton(interfaces->ip_address, client_ip);
 		}
 	}
-
-	info("Server address %s local. IPserver: %s, IPclient %s\n",
-		local? "is":"is NOT", inet_ntoa(*server_ip),inet_ntoa(*client_ip));
+	info("Server address %s local!\n", local? "is":"is NOT");
+	info("Server IP chosen to be: %s\n", inet_ntoa(*server_ip));
+	info("Client IP chosen to be: %s\n", inet_ntoa(*client_ip));
 
 	/* Clean up memory */
 	destroy_interfaces(&interfaces);

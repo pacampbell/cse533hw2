@@ -243,6 +243,11 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 					process, 0, buffer, read, client_addr);
 				// If the read length and the sent length are not the same
 				// Something probably went wrong
+
+//TODO: Fix server_transmit_payload can fail with negative len
+//DEBUG: src/server/server.c:server_transmit_payload:352 Sent -1 bytes to the client
+//ERROR: src/server/server.c:childprocess:248 Read len = 9, Sent len = -13 (they should match)
+
 				if(read != (len - sizeof(pkt->hdr))) {
 					error("Read len = %d, Sent len = %d (they should match)\n",
 						read, (len - (int)sizeof(pkt->hdr)));

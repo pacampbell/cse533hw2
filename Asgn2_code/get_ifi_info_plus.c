@@ -80,6 +80,7 @@ get_ifi_info_plus(int family, int doaliases)
 		if ( (cptr = strchr(ifr->ifr_name, ':')) != NULL)
 			*cptr = 0;		/* replace colon with null */
 #endif
+		cptr += 1; /* added this so it won't complain of unused variable */
 /*=================================================================================*/
 		if (strncmp(lastname, ifr->ifr_name, IFNAMSIZ) == 0) {
 			if (doaliases == 0)
