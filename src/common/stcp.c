@@ -115,7 +115,7 @@ int stcp_close(struct stcp_sock *sock){
 	int err;
 	/* Destroy the Producer/Consumer mutex */
 	if((err = pthread_mutex_destroy(&sock->mutex)) != 0) {
-		error("stcp_socket: pthread_mutex_destroy: %s\n", strerror(err));
+		error("pthread_mutex_destroy: %s\n", strerror(err));
 		return -1;
 	}
 	/* free sliding window */
@@ -267,9 +267,7 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 
 		/* Buffer and shit */
 		seq_index = data_pkt.hdr.seq - stcp->win.next_seq;
-		if(seq_index < 0) {
-			/* send duplicate ACK */
-		} else if(seq_index < WIN_ADV(stcp->win)) {
+		if(seq_index >=0 && seq_index < WIN_ADV(stcp->win)) {
 			/* It can fit in our buffer */
 			Elem *elem = &stcp->win.buf[(stcp->win.end + seq_index) % stcp->win.size];
 			if(elem->valid) {
@@ -286,16 +284,16 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 					stcp->win.next_seq += 1;
 				}
 			}
+			/* init ACK packet */
+			flags = STCP_ACK;
+			if(data_pkt.hdr.flags & STCP_FIN) {
+				info("Producer received FIN, sending FIN ACK.\n");
+				flags |= STCP_FIN;
+				/* set done to 1 to indicate we sent the FIN ACK */
+				done = 1;
+			}
 		}
 
-		/* init ACK packet */
-		flags = STCP_ACK;
-		if(data_pkt.hdr.flags & STCP_FIN) {
-			info("Producer received FIN, sending FIN ACK.\n");
-			flags |= STCP_FIN;
-			/* set done to 1 to indicate we sent the FIN ACK */
-			done = 1;
-		}
 		/* TODO update stcp->next_seq */
 		build_pkt(&ack_pkt, 0, stcp->win.next_seq, WIN_ADV(stcp->win), flags, NULL, 0);
 		info("Sending ACK: ");
@@ -323,7 +321,7 @@ int stcp_client_recv(struct stcp_sock *stcp) {
  * This is called when the client wakes up.
  */
 int stcp_client_read(struct stcp_sock *stcp) {
-	int err, done = 0;
+	int err, done = 0, printed = 0;
 	Elem *elem = NULL;
 	/* Aquire mutex */
 	if((err = pthread_mutex_lock(&stcp->mutex)) != 0) {
@@ -335,6 +333,10 @@ int stcp_client_read(struct stcp_sock *stcp) {
 		elem = &stcp->win.buf[stcp->win.start];
 		if(elem->valid) {
 			int i;
+			if(!printed) {
+				info("Consumer reading buffered data:\n");
+				printed = 1;
+			}
 			/* dump data to stdout */
 			for(i = 0; i < elem->pkt.dlen; ++i){
 				putchar(elem->pkt.data[i]);
@@ -345,6 +347,7 @@ int stcp_client_read(struct stcp_sock *stcp) {
 			stcp->win.start = (stcp->win.start + 1) % stcp->win.size;
 			/* check if the pkt was a FIN */
 			if(elem->pkt.hdr.flags & STCP_FIN) {
+				printf("\n");
 				info("Consumer read end of file data. Ending...\n");
 				done = 1;
 				break;
@@ -357,6 +360,11 @@ int stcp_client_read(struct stcp_sock *stcp) {
 			done = -1;
 			break;
 		}
+	}
+	if(printed && !done) {
+		printf("\n");
+		info("Consumer printed current inorder data.\n");
+		printed = 1;
 	}
 	/* Release mutex */
 	if((err = pthread_mutex_unlock(&stcp->mutex)) != 0) {

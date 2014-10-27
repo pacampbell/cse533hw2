@@ -181,6 +181,7 @@ get_ifi_info_plus(int family, int doaliases)
 			break;
 		}
 	}
+	close(sockfd);
 	free(buf);
 	return(ifihead);	/* pointer to first structure in linked list */
 }
