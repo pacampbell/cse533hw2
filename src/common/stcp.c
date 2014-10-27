@@ -58,8 +58,7 @@ int _valid_SYNACK(struct stcp_pkt *pkt, uint32_t sent_seq) {
 	return 1;
 }
 
-int stcp_socket(int sockfd, uint16_t rwin, uint16_t swin,
-				struct stcp_sock *sock) {
+int stcp_socket(int sockfd, uint16_t win_size, struct stcp_sock *sock) {
 	int err;
 	pthread_mutexattr_t attr;
 
@@ -67,8 +66,8 @@ int stcp_socket(int sockfd, uint16_t rwin, uint16_t swin,
 		error("stcp_socket invalid sockfd: %d\n", sockfd);
 		return -1;
 	}
-	if(rwin == 0 && swin == 0) {
-		error("stcp_socket rwin and swin cannot both be 0.\n");
+	if(win_size == 0) {
+		error("stcp_socket invalid win_size: %hu\n", win_size);
 		return -1;
 	}
 	if(sock == NULL) {
@@ -100,31 +99,14 @@ int stcp_socket(int sockfd, uint16_t rwin, uint16_t swin,
 		pthread_mutex_destroy(&sock->mutex);
 		return -1;
 	}
-	/* receiving window size */
-	sock->recv_win.size = rwin;
-	/* sending window size */
-	sock->send_win.size = swin;
+	/* sliding window size */
+	sock->win.size = win_size;
 	/* Allocate space for the receiving window */
-	if(rwin != 0) {
-		sock->recv_win.buf = calloc(rwin, sizeof(Elem));
-		if(sock->recv_win.buf == NULL) {
-			error("stcp_socket: calloc: %s\n", strerror(errno));
-			pthread_mutex_destroy(&sock->mutex);
-			return -1;
-		}
-	} else {
-		sock->recv_win.buf = NULL;
-	}
-	/* Allocate space for the sending window */
-	if(swin != 0) {
-		sock->send_win.buf = calloc(swin, sizeof(Elem));
-		if(sock->send_win.buf == NULL) {
-			error("stcp_socket: calloc: %s\n", strerror(errno));
-			pthread_mutex_destroy(&sock->mutex);
-			return -1;
-		}
-	} else {
-		sock->send_win.buf = NULL;
+	sock->win.buf = calloc(win_size, sizeof(Elem));
+	if(sock->win.buf == NULL) {
+		error("calloc: %s\n", strerror(errno));
+		pthread_mutex_destroy(&sock->mutex);
+		return -1;
 	}
 	return 0;
 }
@@ -136,13 +118,9 @@ int stcp_close(struct stcp_sock *sock){
 		error("stcp_socket: pthread_mutex_destroy: %s\n", strerror(err));
 		return -1;
 	}
-	/* free receive buffer */
-	if(sock->recv_win.buf != NULL) {
-		free(sock->recv_win.buf);
-	}
-	/* free send buffer */
-	if(sock->send_win.buf != NULL) {
-		free(sock->send_win.buf);
+	/* free sliding window */
+	if(sock->win.buf != NULL) {
+		free(sock->win.buf);
 	}
 	/* close socket */
 	if(sock->sockfd >= 0){
@@ -164,7 +142,7 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 
 	/* init first SYN */
 	sendSYN = 1;
-	build_pkt(&sent_pkt, start_seq, 0, RWIN_ADV(sock->recv_win), STCP_SYN, file, strlen(file));
+	build_pkt(&sent_pkt, start_seq, 0, WIN_ADV(sock->win), STCP_SYN, file, strlen(file));
 	/* attempt to connect backed by timeout */
 	while (1) {
 		if(sendSYN) {
@@ -207,6 +185,8 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 				/* port should be the only 2 bytes of data in host order */
 				newport = ntohs(*p);
 				info("New port received: %hu\n", newport);
+				/* update the initial seq */
+				sock->win.next_seq = reply_pkt.hdr.seq + 1;
 				/* break out out the loop */
 				break;
 			} else {
@@ -236,7 +216,7 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 		return -1;
 	}
 	/* init ACK packet */
-	build_pkt(&ack_pkt, 0, reply_pkt.hdr.seq + 1, RWIN_ADV(sock->recv_win), STCP_ACK, NULL, 0);
+	build_pkt(&ack_pkt, 0, sock->win.next_seq, WIN_ADV(sock->win), STCP_ACK, NULL, 0);
 	printf("Sending ACK to server ");
 	print_hdr(&ack_pkt.hdr);
 	/* Send ACK packet to server */
@@ -259,9 +239,12 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
  * 3. If seq > expected, buffer(if space is avail) P and send duplicate ACK
  */
 int stcp_client_recv(struct stcp_sock *stcp) {
-	int len, err, rv;
+	int len, err, done;
 	struct stcp_pkt data_pkt, ack_pkt;
+	uint16_t flags;
 
+	/* default return 0 (we are not done) */
+	done = 0;
 	/* Aquire mutex */
 	if((err = pthread_mutex_lock(&stcp->mutex)) != 0) {
 		error("pthread_mutex_lock: %s\n", strerror(err));
@@ -271,34 +254,60 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 	/* Attempt to receive packet */
 	len = recv_pkt(stcp->sockfd, &data_pkt, 0);
 	if(len < 0) {
-		perror("stcp_client_recv: recv_pkt");
-		rv = -1;
+		error("Server disconnected.\n");
+		done = -1;
 	} else if(len == 0) {
 		fprintf(stderr, "stcp_connect: recv_pkt failed to read any data\n");
-		rv = -1;
+		done = -1;
 	} else {
+		int seq_index;
 		/* Valid data packet */
 		info("data_pkt: ");
 		print_hdr(&data_pkt.hdr);
 
 		/* Buffer and shit */
-		warn("Buffering data not implemented!\n");
+		seq_index = data_pkt.hdr.seq - stcp->win.next_seq;
+		if(seq_index < 0) {
+			/* send duplicate ACK */
+		} else if(seq_index < WIN_ADV(stcp->win)) {
+			/* It can fit in our buffer */
+			Elem *elem = &stcp->win.buf[(stcp->win.end + seq_index) % stcp->win.size];
+			if(elem->valid) {
+				debug("Window already contains this seq\n");
+			} else {
+				/* append into buffer */
+				debug("Appending pkt into window\n");
+				memcpy(&elem->pkt, &data_pkt, sizeof(data_pkt));
+				elem->valid = 1;
+				if(seq_index == 0){
+					debug("Advancing index of last elem in window\n");
+					stcp->win.end = (stcp->win.end + 1) % stcp->win.size;
+					stcp->win.count += 1;
+					stcp->win.next_seq += 1;
+				}
+			}
+		}
 
 		/* init ACK packet */
-		build_pkt(&ack_pkt, 0,stcp->next_seq, RWIN_ADV(stcp->recv_win), STCP_ACK, NULL, 0);
+		flags = STCP_ACK;
+		if(data_pkt.hdr.flags & STCP_FIN) {
+			info("Producer received FIN, sending FIN ACK.\n");
+			flags |= STCP_FIN;
+			/* set done to 1 to indicate we sent the FIN ACK */
+			done = 1;
+		}
+		/* TODO update stcp->next_seq */
+		build_pkt(&ack_pkt, 0, stcp->win.next_seq, WIN_ADV(stcp->win), flags, NULL, 0);
 		info("Sending ACK: ");
 		print_hdr(&ack_pkt.hdr);
 		/* Send ACK packet to server */
 		len = send_pkt(stcp->sockfd, &ack_pkt, 0);
 		if(len < 0) {
 			perror("stcp_connect: send_pkt");
-			rv = -1;
+			done = -1;
 		} else if(len == 0) {
 			error("send_pkt failed to write any data\n");
-			rv = -1;
-		} else {
-			/* Successfully sent ACK packet */
-			rv = 0;
+			done = -1;
 		}
 	}
 
@@ -307,14 +316,14 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 		error("pthread_mutex_unlock: %s\n", strerror(err));
 		return -1;
 	}
-	return rv;
+	return done;
 }
 
 /**
  * This is called when the client wakes up.
  */
 int stcp_client_read(struct stcp_sock *stcp) {
-	int err, rv = 0;
+	int err, done = 0;
 	Elem *elem = NULL;
 	/* Aquire mutex */
 	if((err = pthread_mutex_lock(&stcp->mutex)) != 0) {
@@ -322,8 +331,8 @@ int stcp_client_read(struct stcp_sock *stcp) {
 		return -1;
 	}
 	/* while buff is readable */
-	while(stcp->recv_win.count > 0) {
-		elem = &stcp->recv_win.buf[stcp->recv_win.start];
+	while(stcp->win.count > 0) {
+		elem = &stcp->win.buf[stcp->win.start];
 		if(elem->valid) {
 			int i;
 			/* dump data to stdout */
@@ -332,12 +341,20 @@ int stcp_client_read(struct stcp_sock *stcp) {
 			}
 			/* Advance the read head */
 			elem->valid = 0;
-			stcp->recv_win.count -= 1;
-			stcp->recv_win.start = (stcp->recv_win.start + 1) % stcp->recv_win.size;
+			stcp->win.count -= 1;
+			stcp->win.start = (stcp->win.start + 1) % stcp->win.size;
+			/* check if the pkt was a FIN */
+			if(elem->pkt.hdr.flags & STCP_FIN) {
+				info("Consumer read end of file data. Ending...\n");
+				done = 1;
+				break;
+			} else {
+				done = 0;
+			}
 
 		} else {
 			error("Count > 0 but circle buff elem is not valid!\n");
-			rv = -1;
+			done = -1;
 			break;
 		}
 	}
@@ -346,7 +363,7 @@ int stcp_client_read(struct stcp_sock *stcp) {
 		error("pthread_mutex_unlock: %s\n", strerror(err));
 		return -1;
 	}
-	return rv;
+	return done;
 }
 
 int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
