@@ -23,10 +23,10 @@ int main(int argc, char *argv[]) {
 			warn("No interfaces were bound to. Aborting program.\n");
 		}
 		/* Clean up memory */
-		debug("Freeing interfaces list - %d.\n", getpid());
+		debug("Freeing interfaces list - %d.\n", (int)getpid());
 		destroy_interfaces(&interfaces);
 		/* Free up any process information that is left over */
-		debug("Freeing processes list - %d.\n", getpid());
+		debug("Freeing processes list - %d.\n", (int)getpid());
 		destroy_processes(&processes);
 	} else {
 		/* The config parsing failed */
@@ -100,7 +100,7 @@ void run(Interface *interfaces, Config *config) {
 							if(pid == -1 || pid == 0) {
 								// Either fork failed or we are in the child process
 								// Set running to false and break out of this loop
-								info("Child process has finished; pid = %d\n", getpid());
+								info("Child process has finished; pid = %d\n", (int)getpid());
 								running = false;
 								break;
 							}
@@ -130,7 +130,7 @@ int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 			break;
 		case 0:
 			/* In child */
-			info("Server Child - PID: %d\n", getpid());
+			info("Server Child - PID: %d\n", (int)getpid());
 			// TODO: Close connection to other interfaces
 			// other FDs, etc.
 			interface = interfaces;
