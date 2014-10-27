@@ -71,11 +71,13 @@ int main(int argc, char *argv[]) {
 	}
 	/* Start Producing  */
 	if(runProducer(&stcp) < 0) {
-		error("Producer failed!\n");
+		error("Producer failed! Cancelling Consumer thread.\n");
 		/* Cancel the Consumer thread */
-		if((rv = pthread_cancel(ptid) != 0)) {
+		if((rv = pthread_cancel(ptid) != 0))
 			error("pthread_cancel: %s\n", strerror(rv));
-		}
+		/* wait for the consumer to cancel */
+		if((rv = pthread_join(ptid, NULL)) < 0)
+			error("pthread_join: %s\n", strerror(rv));
 		goto stcp_failure;
 	}
 	/* wait for the consumer to finish reading all the data */
@@ -104,9 +106,7 @@ int main(int argc, char *argv[]) {
 	return EXIT_SUCCESS;
 	stcp_failure:
 	/* close the STCP socket */
-	if(stcp_close(&stcp) < 0) {
-		perror("main: stcp_close");
-	}
+	stcp_close(&stcp);
 	return EXIT_FAILURE;
 }
 
@@ -174,7 +174,7 @@ void *runConsumer(void *arg) {
 	struct consumer_args *args = arg;
     struct stcp_sock *stcp = args->stcp;
 	unsigned int ms;
-	int err, oldtype, done;
+	int err, oldtype, oldstate, done;
 	int *retval;
 	/* allocate space for our exit status */
 	if((retval = malloc(sizeof(int))) == NULL) {
@@ -197,8 +197,19 @@ void *runConsumer(void *arg) {
 		if(usleep(ms * 1000) < 0) {
 			perror("runConsumer: usleep");
 		}
-		/* Wake up and read from buffer */
+		/* Wake up and read from buffer. We do not want to be canceled here. */
+		if((err = pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate)) != 0) {
+			error("pthread_setcanceltype: %s\n", strerror(err));
+			*retval = -1;
+			pthread_exit(retval);
+		}
 		done = stcp_client_read(stcp);
+		/* Reenable cancelability */
+		if((err = pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &oldstate)) != 0) {
+			error("pthread_setcanceltype: %s\n", strerror(err));
+			*retval = -1;
+			pthread_exit(retval);
+		}
 		if(done < 0) {
 			/* some kind of error */
 			*retval = -1;

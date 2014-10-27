@@ -115,7 +115,7 @@ int stcp_close(struct stcp_sock *sock){
 	int err;
 	/* Destroy the Producer/Consumer mutex */
 	if((err = pthread_mutex_destroy(&sock->mutex)) != 0) {
-		error("stcp_socket: pthread_mutex_destroy: %s\n", strerror(err));
+		error("pthread_mutex_destroy: %s\n", strerror(err));
 		return -1;
 	}
 	/* free sliding window */
