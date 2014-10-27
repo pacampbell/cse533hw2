@@ -86,11 +86,19 @@ bool server_valid_syn(int size, struct stcp_pkt *pkt);
 bool server_valid_ack(int size, struct stcp_pkt *pkt);
 
 /**
- * Generic function to transmit server payloads.
+ * Generic function to transmit server payloads on a non-connected udp socket.
  * @return Returns the number of bytes transmitted for error checking.
  */
-int server_transmit_payload(int socket, int seq, int ack, 
+int server_transmit_payload1(int socket, int seq, int ack, 
 	struct stcp_pkt *pkt, Process *process, int flags, void *data, 
 	int datalen, struct sockaddr_in client);
+
+/**
+ * Generic function to transmit server payloads to a connected udp socket.
+ * @return Returns the number of bytes transmitted for checking.
+ */
+int server_transmit_payload2(int socket, int seq, int ack, 
+	struct stcp_pkt *pkt, Process *process, int flags, void *data, 
+	int datalen);
 
 #endif

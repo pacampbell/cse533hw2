@@ -1,8 +1,6 @@
 #include "server.h"
 
 static Process *processes = NULL;
-static void *orig_alarm = NULL;
-static volatile sig_atomic_t resend = false; 
 static sigjmp_buf env;
 
 int main(int argc, char *argv[]) {
@@ -66,7 +64,14 @@ void run(Interface *interfaces, Config *config) {
 			if(FD_ISSET(node->sockfd, &rset)) {
 				struct stcp_pkt pkt;
 				debug("Detected connection on interface: <%s> %s\n", node->name, node->ip_address);
-				valid_pkt = recvfrom_pkt(node->sockfd, &pkt, 0, (struct sockaddr *)&connection_addr, &connection_len);
+				if(setjmp(env) != 0) {
+					warn("Interface <%s> %s timed out waiting to receive SYN.\n", node->name, node->ip_address);
+					continue;
+				} else {
+					set_timeout(10);
+					valid_pkt = recvfrom_pkt(node->sockfd, &pkt, 0, (struct sockaddr *)&connection_addr, &connection_len);
+					clear_timeout();
+				}
 				if(server_valid_syn(valid_pkt, &pkt)) {
 					// Packet was valid
 					// Check if process already exists for child
@@ -100,7 +105,7 @@ void run(Interface *interfaces, Config *config) {
 							if(pid == -1 || pid == 0) {
 								// Either fork failed or we are in the child process
 								// Set running to false and break out of this loop
-								info("Child process has finished; pid = %d\n", (int)getpid());
+								warn("Failed fork or runaway child process - %d\n", pid);
 								running = false;
 								break;
 							}
@@ -111,6 +116,8 @@ void run(Interface *interfaces, Config *config) {
 						// TODO: The process already exists; What to do?
 						info("Process already exists for %s:%d\n", process->ip_address, process->port);
 					}
+				} else {
+					/* IF I got here then what? */
 				}
 			}
 			node = node->next;
@@ -145,6 +152,15 @@ int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 				interface = interface->next;
 			}
 			childprocess(process, pkt);
+			info("Child process has finished; pid = %d\n", (int)getpid());
+			/* Clean up memory */
+			debug("Freeing interfaces list - %d.\n", (int)getpid());
+			destroy_interfaces(&interfaces);
+			/* Free up any process information that is left over */
+			debug("Freeing processes list - %d.\n", (int)getpid());
+			destroy_processes(&processes);
+			// Quit the child
+			exit(EXIT_SUCCESS);
 			break;
 		default:
 			/* In parent */
@@ -196,26 +212,35 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 			int len = 0;
 			int handshake_attempts = 0;
 			do {
-				// Send SYN | ACK for new socket
-				len = server_transmit_payload(process->interface_fd, 0, 
-					pkt->hdr.seq + 1, pkt, process, STCP_SYN | STCP_ACK, 
-					&server_addr.sin_port, sizeof(server_addr.sin_port), 
-					client_addr);
-				// Log on the serer the error
-				if(len < 0) {
-					error("Failed to send packet to %s:%d\n", process->ip_address, process->port);
-				}
-				set_timeout();
 				// resend = false;
-				setjmp(env);
+				if(setjmp(env) != 0) {
+					// SYN_ACK HANDSHAKE TIMED OUT
+					handshake_attempts++;
+					warn("Handshake SYN_ACK timed out on attempt %d\n", handshake_attempts);
+					// TODO: Send on new and old
+					len = server_transmit_payload1(process->interface_fd, 0, 
+						pkt->hdr.seq + 1, pkt, process, STCP_SYN | STCP_ACK, 
+						&server_addr.sin_port, sizeof(server_addr.sin_port), 
+						client_addr);
+					len = server_transmit_payload2(sock, 0, 
+						pkt->hdr.seq + 1, pkt, process, STCP_SYN | STCP_ACK, 
+						&server_addr.sin_port, sizeof(server_addr.sin_port));
+				} else {
+					// Send SYN | ACK for new socket
+					len = server_transmit_payload1(process->interface_fd, 0, 
+						pkt->hdr.seq + 1, pkt, process, STCP_SYN | STCP_ACK, 
+						&server_addr.sin_port, sizeof(server_addr.sin_port), 
+						client_addr);
+					// Log on the serer the error
+					if(len < 0) {
+						error("Failed to send packet to %s:%d\n", process->ip_address, process->port);
+					}
+				}
+				/* TODO: how to calculate correct timeout values ? */
+				set_timeout(10);
 				/* Wait for client's ACK */
 				len = recv_pkt(sock, &ack, 0);
-				if(resend) {
-					resend = false;
-					handshake_attempts++;
-				}
 				clear_timeout();
-
 			} while(!server_valid_ack(len, &ack) && handshake_attempts < MAX_HANDSHAKE_ATTEMPTS);
 			
 			// Check to make sure we didnt have too many handshake attempts
@@ -239,8 +264,8 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 			while((read = fread(buffer, sizeof(unsigned char), STCP_MAX_DATA, fp)) > 0) {
 				debug("Read %d bytes from the file '%s'\n", read, file);
 				// Transmit payload to server
-				len = server_transmit_payload(sock, pkt->hdr.seq + 1, 0, pkt,
-					process, 0, buffer, read, client_addr);
+				len = server_transmit_payload2(sock, pkt->hdr.seq + 1, 0, pkt,
+					process, 0, buffer, read);
 				// If the read length and the sent length are not the same
 				// Something probably went wrong
 
@@ -255,8 +280,8 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 				}
 			}
 			// Send the fin packet
-			len = server_transmit_payload(sock, pkt->hdr.seq + 1, 0, pkt, 
-				process, STCP_FIN, buffer, read, client_addr);
+			len = server_transmit_payload2(sock, pkt->hdr.seq + 1, 0, pkt, 
+				process, STCP_FIN, buffer, read);
 			// TODO: Receive the FIN_ACK from cleint
 			sleep(1);
 		} else {
@@ -290,19 +315,17 @@ static void sigchld_handler(int signum) {
 }
 
 static void set_timeout(int nsec) {
-	orig_alarm = signal(SIGCHLD, sigalrm_timeout);
+	signal(SIGALRM, sigalrm_timeout);
 	if(alarm(nsec) != 0) {
-		warn("Alarm was already set with nsec = %d\n", nsec);
+		warn("Alarm was already set with sec = %d\n", nsec);
 	}
 }
 
 static void clear_timeout() {
 	alarm(0);
-	signal(SIGCHLD, orig_alarm);
 }
 
 static void sigalrm_timeout(int signum) {
-	resend = true;
 	siglongjmp(env, 1);
 }
 
@@ -342,7 +365,7 @@ bool server_valid_ack(int size, struct stcp_pkt *pkt) {
 	return valid;
 }
 
-int server_transmit_payload(int socket, int seq, int ack, struct stcp_pkt *pkt,
+int server_transmit_payload1(int socket, int seq, int ack, struct stcp_pkt *pkt,
 							Process *process, int flags, void *data, int datalen,
 							struct sockaddr_in client) {
 	int bytes = 0;
@@ -354,6 +377,21 @@ int server_transmit_payload(int socket, int seq, int ack, struct stcp_pkt *pkt,
 	#endif
 	// Send the packet and see what happens
 	bytes = sendto_pkt(socket, pkt, 0, (struct sockaddr*)&client, sizeof(client));
+	debug("Sent %d bytes to the client\n", bytes);
+	return bytes;
+}
+
+int server_transmit_payload2(int socket, int seq, int ack, struct stcp_pkt *pkt,
+							Process *process, int flags, void *data, int datalen) {
+	int bytes = 0;
+	// Set up packet data
+	build_pkt(pkt, seq, ack, process->interface_win_size, flags, data, datalen);
+	#ifdef DEBUG
+		debug("Sending pkt: ");
+		print_hdr(&pkt->hdr);
+	#endif
+	// Send the packet and see what happens
+	bytes = send_pkt(socket, pkt, 0);
 	debug("Sent %d bytes to the client\n", bytes);
 	return bytes;
 }
