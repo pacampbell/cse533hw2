@@ -20,6 +20,7 @@
 
 
 #define SERVER_BUFFER_SIZE 2048
+#define MAX_HANDSHAKE_ATTEMPTS 3
 
 /**
  * Starts the main loop of the server.
@@ -50,5 +51,26 @@ void childprocess(Process *process, struct stcp_pkt *pkt);
  * received the process from the Processes list will be removed.
  */
 void sigchld_handler(int signum);
+
+/* Packet helper functions */
+
+/**
+ * Checks to see if the pkt received is a SYN packet.
+ * @return Returns true if a SYN packet, else false.
+ */
+bool server_valid_syn(int size, struct stcp_pkt *pkt);
+
+/**
+ * Checks to see if the pkt received is an ACK packet.
+ * @return Returns true if an ACK packet, else false.
+ */
+bool server_valid_ack(int size, struct stcp_pkt *pkt);
+
+/**
+ * Generic function to transmit server payloads.
+ * @return Returns the number of bytes transmitted for error checking.
+ */
+int server_transmit_payload(int socket, struct stcp_pkt *pkt, 
+	Process *process, int flags, void *data, int datalen, struct sockaddr_in client);
 
 #endif

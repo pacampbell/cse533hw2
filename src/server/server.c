@@ -60,15 +60,7 @@ void run(Interface *interfaces, Config *config) {
 				struct stcp_pkt pkt;
 				debug("Detected connection on interface: <%s> %s\n", node->name, node->ip_address);
 				valid_pkt = recvfrom_pkt(node->sockfd, &pkt, 0, (struct sockaddr *)&connection_addr, &connection_len);
-				if(valid_pkt < 0) {
-					/* Error on recv system call */
-					if(errno != EINTR){
-						error("recvfrom: %s\n", strerror(errno));
-						//TODO: What do here? exit failure? ignore?
-					}
-				} else if(valid_pkt == 0) {
-					debug("Ignoring message: too small to be STCP packet.\n");
-				} else {
+				if(server_valid_syn(valid_pkt, &pkt)) {
 					// Packet was valid
 					// Check if process already exists for child
 					if((process = get_process(processes, node->ip_address, connection_addr.sin_port)) == NULL) {
@@ -124,6 +116,7 @@ void run(Interface *interfaces, Config *config) {
 int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 	// TODO: Add signal handler for sigchild, to remove process from process list
 	int pid;
+	Interface *interface = NULL;
 	signal(SIGCHLD, sigchld_handler);
 	switch(pid = fork()) {
 		case -1:
@@ -135,6 +128,17 @@ int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 			info("Server Child - PID: %d\n", getpid());
 			// TODO: Close connection to other interfaces
 			// other FDs, etc.
+			interface = interfaces;
+			while(interface != NULL) {
+				if(interface->sockfd != process->interface_fd) {
+					if(close(interface->sockfd) != 0) {
+						warn("Unable to close interface: <%s> %d\n", interface->name, interface->sockfd);
+					} else {
+						debug("Closed interface: <%s> %d\n", interface->name, interface->sockfd);
+					}
+				}
+				interface = interface->next;
+			}
 			childprocess(process, pkt);
 			break;
 		default:
@@ -183,39 +187,43 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 		// Create socketfd
 		sock = createClientSocket(&client_addr, &server_addr, samesub);
 
-		// Send SYN | ACK for new socket
 		if(sock >= 0) {
 			int len = 0;
-			// Set up packet data
-			build_pkt(
-				pkt, 
-				0,
-				pkt->hdr.seq + 1,
-				process->interface_win_size,
-				STCP_SYN | STCP_ACK,
-				&server_addr.sin_port,
-				sizeof(server_addr.sin_port)
-			);
-
-			// Send the packet and see what happens
-			len = sendto_pkt(
-				process->interface_fd,
-				pkt,
-				0,
-				(struct sockaddr*)&client_addr,
-				sizeof(client_addr)
-			);
+			int handshake_attempts = 0;
+			do {
+				// Send SYN | ACK for new socket
+				len = server_transmit_payload(
+					process->interface_fd,
+					pkt, 
+					process, 
+					STCP_SYN | STCP_ACK, 
+					&server_addr.sin_port, 
+					sizeof(server_addr.sin_port), 
+					client_addr);
+				debug("Sent %d bytes to the client\n", len);
+				// Log on the serer the error
+				if(len < 0) {
+					error("Failed to send packet to %s:%d\n", process->ip_address, process->port);
+				}
+				/* Wait for client's ACK */
+				len = recv_pkt(sock, &ack, 0);
+			} while(!server_valid_ack(len, &ack) && handshake_attempts++ < MAX_HANDSHAKE_ATTEMPTS);
 			
-			debug("Sent %d bytes to the client\n", len);
-			// Log on the serer the error
-			if(len < 0) {
-				error("Failed to send packet to %s:%d\n", process->ip_address, process->port);
+			// Check to make sure we didnt have too many handshake attempts
+			if(handshake_attempts > MAX_HANDSHAKE_ATTEMPTS) {
+				error("Unable to complete Handshake on SYN_ACK step.");
+				goto clean_up;
 			}
-			/* Wait for client's ACK */
-			/* TODO: validate ACK */
-			recv_pkt(sock, &ack, 0);
+
+			/* Got a good ack packet */
 			debug("Received pkt from client ");
 			print_hdr(&ack.hdr);
+
+			/* Close original interface socket */
+			if(close(process->interface_fd) != 0) {
+				warn("Failed to close the interface fd: %d\n", processes->interface_fd);
+			}
+
 			/* Connection established start sending file */
 			while((read = fread(buffer, sizeof(unsigned char), STCP_MAX_DATA, fp)) > 0) {
 				debug("Read %d bytes from the file '%s'\n", read, file);
@@ -265,9 +273,13 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 			);
 			// Alert the user that fin was sent
 			debug("Sent fin packet - %d bytes.\n", len);
+
+			// Client should send an ACK packet
+
 		} else {
 			error("Failed to create a socket.\n");
 		}
+clean_up:
 		/* Close the opened file */
 		fclose(fp);
 	} else {
@@ -289,3 +301,64 @@ void sigchld_handler(int signum) {
         }
     }
 }
+
+bool server_valid_syn(int size, struct stcp_pkt *pkt) {
+	bool valid = false;
+	if(pkt != NULL) {
+		if(size < 0 && errno != EINTR) {
+			/* Error on recv system call */
+			error("recvfrom: %s\n", strerror(errno));
+			//TODO: What do here? exit failure? ignore?
+		} else if(size == 0) {
+			debug("Ignoring message: too small to be STCP packet.\n");
+		} else if(pkt->hdr.flags & STCP_SYN) {
+			valid = true;
+		} else {
+			warn("Invalid SYN packet on handshake initialization.. Dropping packet.\n");
+		}
+	}
+	return valid;
+}
+
+bool server_valid_ack(int size, struct stcp_pkt *pkt) {
+	bool valid = false;
+	if(pkt != NULL) {
+		if(size < 0 && errno != EINTR) {
+			/* Error on recv system call */
+			error("recvfrom: %s\n", strerror(errno));
+			//TODO: What do here? exit failure? ignore?
+			} else if(size == 0) {
+			debug("Ignoring message: too small to be STCP packet.\n");
+		} else if(pkt->hdr.flags & STCP_ACK) {
+			valid = true;
+		} else {
+			warn("Invalid ACK packet.. Dropping packet.\n");
+		}
+	}
+	return valid;
+}
+
+int server_transmit_payload(int socket, struct stcp_pkt *pkt, Process *process, int flags, void *data, int datalen, struct sockaddr_in client) {
+	int bytes = 0;
+	// Set up packet data
+	build_pkt(
+		pkt, 
+		0,
+		pkt->hdr.seq + 1,
+		process->interface_win_size,
+		flags,
+		data,
+		datalen
+	);
+
+	// Send the packet and see what happens
+	bytes = sendto_pkt(
+		socket,
+		pkt,
+		0,
+		(struct sockaddr*)&client,
+		sizeof(client)
+	);
+	return bytes;
+}
+
