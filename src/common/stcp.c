@@ -31,11 +31,11 @@ void ntoh_hdr(struct stcp_hdr *hdr) {
 }
 
 void print_hdr(struct stcp_hdr *hdr) {
-	printf(" seq:%u, ack:%u, win:%hu, flags:%s %s %s\n", hdr->seq, hdr->ack,
+	printf(KWHT "seq:%u, ack:%u, win:%hu, flags: %s%s%s\b\n" KNRM, hdr->seq, hdr->ack,
 			hdr->win,
-			(hdr->flags & STCP_FIN)? "FIN" : "",
-			(hdr->flags & STCP_SYN)? "SYN" : "",
-			(hdr->flags & STCP_ACK)? "ACK" : "");
+			(hdr->flags & STCP_FIN)? "FIN " : "",
+			(hdr->flags & STCP_SYN)? "SYN " : "",
+			(hdr->flags & STCP_ACK)? "ACK " : "");
 }
 
 int _valid_SYNACK(struct stcp_pkt *pkt, uint32_t sent_seq) {

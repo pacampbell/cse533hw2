@@ -10,6 +10,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+// Timeout mechanisms
+#include <signal.h>
+#include <setjmp.h>
 // Program headers
 #include "utility.h"
 #include "stcp.h"
@@ -50,7 +53,23 @@ void childprocess(Process *process, struct stcp_pkt *pkt);
  * Handles SIG_CHILD from forked processes. When this signal is
  * received the process from the Processes list will be removed.
  */
-void sigchld_handler(int signum);
+static void sigchld_handler(int signum);
+
+/**
+ * Handles the timout from sigalarm
+ */
+static void sigalrm_timeout(int signum);
+
+/**
+ * Sets the timeout for sigalrm.
+ */
+static void set_timeout();
+
+/**
+ * Clears the alarm timer and sets back
+ * the original alarm function.
+ */ 
+static void clear_timeout();
 
 /* Packet helper functions */
 
@@ -70,7 +89,8 @@ bool server_valid_ack(int size, struct stcp_pkt *pkt);
  * Generic function to transmit server payloads.
  * @return Returns the number of bytes transmitted for error checking.
  */
-int server_transmit_payload(int socket, struct stcp_pkt *pkt, 
-	Process *process, int flags, void *data, int datalen, struct sockaddr_in client);
+int server_transmit_payload(int socket, int seq, int ack, 
+	struct stcp_pkt *pkt, Process *process, int flags, void *data, 
+	int datalen, struct sockaddr_in client);
 
 #endif
