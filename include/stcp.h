@@ -49,7 +49,7 @@ typedef struct {
 	/* TODO: add rtt_info and other stuff */
 } Elem;
 
-/* STCP recv sliding window */
+/* STCP sliding window */
 typedef struct {
 	Elem *buf;			/* (contiguous) buffer space for size Elems */
 	uint16_t size;		/* length of receive window (#Elem allocated) */
@@ -57,20 +57,20 @@ typedef struct {
 	uint16_t end;		/* Index of the next free elem		*/
 	uint16_t start;		/* Index of the oldest elem		*/
 	/* stuff specifically for receiving window */
+	uint32_t next_seq;	/* Sequence Number we expect to recv next */
+	/* stuff specifically for sending window */
+	uint32_t next_ack;	/* Acknowledgement Number we expect to recv next */
 } Cbuf;
 
 /* This will be the 'new socket' used to send and recv segments */
 struct stcp_sock {
 	int sockfd;			/* The connected UDP socket */
+	Cbuf win;
 
 	/* For Receiving */
 	pthread_mutex_t mutex;
-	uint32_t next_seq;	/* Sequence Number we expect to recv next */
-	Cbuf recv_win;
 
 	/* For Sending */
-	uint32_t next_ack;	/* Acknowledgement Number we expect to recv next */
-	Cbuf send_win;
 	uint16_t cwin;		/* Congestion window value */
 	uint16_t ssthresh;	/* Slow Start Threshhold */
 	// TODO: other shit for sending
@@ -101,13 +101,12 @@ int _valid_SYNACK(struct stcp_pkt *pkt, uint32_t sent_seq);
  * created with createClientSocket or appropriately binded/connected to
  * a peer.
  *
- * @param sockfd A valid sockfd that has been created by createClientSocket
- * @param rwin   The maximum number of segments in the receiving window
- * @param swin   The maximum number of segments in the sending window
- * @param sock   The stcp_sock to initialize
- * @return 0 on success or -1 on error.
+ * @param sockfd 	A valid sockfd that has been created by createClientSocket
+ * @param win_size  The maximum number of segments in the sliding window
+ * @param sock   	The stcp_sock to initialize
+ * @return 			0 on success or -1 on error.
  */
-int stcp_socket(int sockfd, uint16_t rwin, uint16_t swin, struct stcp_sock *sock);
+int stcp_socket(int sockfd, uint16_t win_size, struct stcp_sock *sock);
 
 /*
  * Free all memory associated with this stcp socket and close the
@@ -132,6 +131,9 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
  * Recv a pkt from the server, buffer it, and send an ACK.
  *
  * @param sock A stcp_sock initialized by the client for reading.
+ * @return  -1 on error
+ *			 0 if the FIN was received
+ *			>0 if we are waiting for more data
  */
 int stcp_client_recv(struct stcp_sock *sock);
 
@@ -168,6 +170,6 @@ int recvfrom_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
  * Start Circle Buffer Functions/Macros
  */
 
-#define RWIN_ADV(rwin) ((rwin).size - (rwin).count)
+#define WIN_ADV(win) ((win).size - (win).count)
 
 #endif

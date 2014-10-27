@@ -11,6 +11,7 @@ int main(int argc, char *argv[]) {
 	struct consumer_args args;
 	pthread_t ptid;
 	pthread_attr_t pattr;
+	int *exit_status;
 	// Init pthread attributes
 	if((rv = pthread_attr_init(&pattr))) {
 		errno = rv;
@@ -47,7 +48,7 @@ int main(int argc, char *argv[]) {
 	fd = createClientSocket(&serv_addr, &client_addr, local);
 
 	/* initialize our STCP socket */
-	if(stcp_socket(fd, config.win_size, 0, &stcp) < 0) {
+	if(stcp_socket(fd, config.win_size, &stcp) < 0) {
 		fprintf(stderr, "stcp_socket failed\n");
 		exit(EXIT_FAILURE);
 	}
@@ -71,19 +72,25 @@ int main(int argc, char *argv[]) {
 	/* Start Producing  */
 	if(runProducer(&stcp) < 0) {
 		error("Producer failed!\n");
-		if((rv = pthread_kill(ptid, SIGKILL) != 0)) {
-			error("pthread_kill: %s\n", strerror(rv));
+		/* Cancel the Consumer thread */
+		if((rv = pthread_cancel(ptid) != 0)) {
+			error("pthread_cancel: %s\n", strerror(rv));
 		}
 		goto stcp_failure;
 	}
 	/* wait for the consumer to finish reading all the data */
-	/* NULL so dont recv exit status */
-	if((rv = pthread_join(ptid, NULL)) < 0) {
+	if((rv = pthread_join(ptid, (void **)&exit_status)) < 0) {
 		errno = rv;
 		perror("main: pthread_join");
 		goto stcp_failure;
 	}
-	printf("Consumer thread joined");
+	debug("Consumer thread joined: thread exit status: %d\n", *exit_status);
+	if(*exit_status < 0) {
+		/* Consumer thread failed */
+		error("Consumer thread failed!\n");
+	}
+	/* free thread's return status */
+	free(exit_status);
 	/* close the STCP socket */
 	if(stcp_close(&stcp) < 0) {
 		perror("main: stcp_close");
@@ -123,6 +130,7 @@ bool chooseIPs(Config *config, struct in_addr *server_ip,
 }
 
 int runProducer(struct stcp_sock *stcp) {
+	int done;
 	/* select stuff */
 	struct timeval tv;
 	long timeout = 30; /* lets use a 30 second timeout */
@@ -141,10 +149,14 @@ int runProducer(struct stcp_sock *stcp) {
 			return -1;
 		}
 		if (FD_ISSET(stcp->sockfd, &rset)) {
-			if(stcp_client_recv(stcp) < 0) {
+			done = stcp_client_recv(stcp);
+			if(done < 0) {
+				/* some kind of error */
 				return -1;
+			} else if (done) {
+				/* We got the FIN from the server and sent a FIN ACK */
+				break;
 			}
-			/* if is FIN, send ACK and break */
 		} else {
 			/* 30 second timeout reached on select and socket was not readable.
 			 * If this happens we assume the server crashed or the network is down.
@@ -152,7 +164,6 @@ int runProducer(struct stcp_sock *stcp) {
 			 *       timeout on the client side, but it seems silly to hang forever.
 			 */
 			error("Producer timed out after %ld seconds without receiving data\n", timeout);
-			printf("Producer timed out after %ld seconds without receiving data\n", timeout);
 			return -1;
 		}
 	}
@@ -163,6 +174,21 @@ void *runConsumer(void *arg) {
 	struct consumer_args *args = arg;
     struct stcp_sock *stcp = args->stcp;
 	unsigned int ms;
+	int err, oldtype, done;
+	int *retval;
+	/* allocate space for our exit status */
+	if((retval = malloc(sizeof(int))) == NULL) {
+		error("Consumer: malloc failed\n");
+		pthread_exit(NULL);
+	}
+	*retval = 0;
+
+	/* Allow this thread to be cancelled at anytime */
+	if((err = pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldtype)) != 0) {
+		error("pthread_setcanceltype: %s\n", strerror(err));
+		*retval = -1;
+		pthread_exit(retval);
+	}
 	/* set the seed for our uniform uniformly distributed RNG */
 	srand48(args->seed);
 	while(1) {
@@ -172,10 +198,16 @@ void *runConsumer(void *arg) {
 			perror("runConsumer: usleep");
 		}
 		/* Wake up and read from buffer */
-		stcp_client_read(stcp);
-		/* TODO: handle error */
+		done = stcp_client_read(stcp);
+		if(done < 0) {
+			/* some kind of error */
+			*retval = -1;
+		} else if (done) {
+			/* We got the FIN from the server and sent a FIN ACK */
+			break;
+		}
 	}
-	return 0;
+	pthread_exit(retval);
 }
 
 
