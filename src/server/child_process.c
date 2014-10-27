@@ -96,11 +96,18 @@ Process* get_process_by_pid(Process *processes, int pid) {
 	return found;
 }
 
-static void _destroy_processes(Process *processes) {
-	warn("Fuction '_destroy_processes' not implemented.\n");
+static void _destroy_processes(Process *process) {
+	if(process != NULL) {
+		_destroy_processes(process->next);
+		free(process);
+	}
 }
 
 void destroy_processes(Process **processes) {
-	warn("Fuction 'destroy_processes' not implemented.\n");
-	_destroy_processes(*processes);
+	if(processes != NULL) {
+		_destroy_processes(*processes);
+		*processes = NULL;
+	} else {
+		warn("Failed attempt at destroying NULL process list.\n");
+	}
 }

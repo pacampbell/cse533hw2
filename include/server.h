@@ -10,6 +10,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+// Timeout mechanisms
+#include <signal.h>
+#include <setjmp.h>
 // Program headers
 #include "utility.h"
 #include "stcp.h"
@@ -20,6 +23,7 @@
 
 
 #define SERVER_BUFFER_SIZE 2048
+#define MAX_HANDSHAKE_ATTEMPTS 3
 
 /**
  * Starts the main loop of the server.
@@ -49,6 +53,44 @@ void childprocess(Process *process, struct stcp_pkt *pkt);
  * Handles SIG_CHILD from forked processes. When this signal is
  * received the process from the Processes list will be removed.
  */
-void sigchld_handler(int signum);
+static void sigchld_handler(int signum);
+
+/**
+ * Handles the timout from sigalarm
+ */
+static void sigalrm_timeout(int signum);
+
+/**
+ * Sets the timeout for sigalrm.
+ */
+static void set_timeout();
+
+/**
+ * Clears the alarm timer and sets back
+ * the original alarm function.
+ */ 
+static void clear_timeout();
+
+/* Packet helper functions */
+
+/**
+ * Checks to see if the pkt received is a SYN packet.
+ * @return Returns true if a SYN packet, else false.
+ */
+bool server_valid_syn(int size, struct stcp_pkt *pkt);
+
+/**
+ * Checks to see if the pkt received is an ACK packet.
+ * @return Returns true if an ACK packet, else false.
+ */
+bool server_valid_ack(int size, struct stcp_pkt *pkt);
+
+/**
+ * Generic function to transmit server payloads.
+ * @return Returns the number of bytes transmitted for error checking.
+ */
+int server_transmit_payload(int socket, int seq, int ack, 
+	struct stcp_pkt *pkt, Process *process, int flags, void *data, 
+	int datalen, struct sockaddr_in client);
 
 #endif
