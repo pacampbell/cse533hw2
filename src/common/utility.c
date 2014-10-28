@@ -41,7 +41,7 @@ bool parseClientConfig(char *path, Config *config) {
 	if((rlen = read(fd, file, sizeof(file))) > 0) {
 		char ipbuf[256];
 		/* HACKS: But I tested this with UNIX, DOS, Mac line endings */
-		if(sscanf(file, "%255s%*[ \r\n]%hu%*[ \r\n]%255s%*[ \r\n]%u%*[ \r\n]%d%*[ \r\n]%lf%*[ \r\n]%u",
+		if(sscanf(file, "%255s\n%hu\n%255s\n%u\n%d\n%lf\n%u",
 				ipbuf, &config->port, config->filename, &config->win_size,
 				&config->seed, &config->loss, &config->mean) != 7) {
 			error("Config file: failed to parse all 7 lines. Please verify format\n");
