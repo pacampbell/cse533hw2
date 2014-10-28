@@ -15,11 +15,30 @@ int main(int argc, char *argv[]) {
 		// Get a list interfaces
 		interfaces = discoverInterfaces(&config, BIND_INTERFACE);
 		if(size(interfaces)) {
+			/* Setup some basic signals */
+			struct sigaction sigac_child;
+			struct sigaction sigac_alarm;
+			/* Zero out memory */
+			memset(&sigac_child, '\0', sizeof(sigac_child));
+			memset(&sigac_alarm, '\0', sizeof(sigac_alarm));
+			/* Set values */
+			sigac_child.sa_sigaction = &sigchld_handler;
+			sigac_alarm.sa_sigaction = &sigalrm_timeout;
+			/* Set the sigactions */
+			if(sigaction(SIGCHLD, &sigac_child, NULL) < 0) {
+				error("Unable to set SIGCHLD sigaction.\n");
+				goto clean_up;
+			}
+			if(sigaction(SIGALRM, &sigac_child, NULL)) {
+				error("Unable to set SIGALRM sigaction.\n");
+				goto clean_up;
+			}
 			/* Start the servers main loop */
 			run(interfaces, &config);
 		} else {
 			warn("No interfaces were bound to. Aborting program.\n");
 		}
+clean_up:
 		/* Clean up memory */
 		debug("Freeing interfaces list - %d.\n", (int)getpid());
 		destroy_interfaces(&interfaces);
@@ -129,7 +148,6 @@ int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 	// TODO: Add signal handler for sigchild, to remove process from process list
 	int pid;
 	Interface *interface = NULL;
-	signal(SIGCHLD, sigchld_handler);
 	switch(pid = fork()) {
 		case -1:
 			/* Failed */
@@ -299,7 +317,7 @@ clean_up:
 	}
 }
 
-static void sigchld_handler(int signum) {
+static void sigchld_handler(int signum, siginfo_t *siginfo, void *context) {
     int pid;
     Process *process = NULL;
     while ((pid = waitpid(-1, NULL, WNOHANG)) != -1) {
@@ -315,7 +333,6 @@ static void sigchld_handler(int signum) {
 }
 
 static void set_timeout(int nsec) {
-	signal(SIGALRM, sigalrm_timeout);
 	if(alarm(nsec) != 0) {
 		warn("Alarm was already set with sec = %d\n", nsec);
 	}
@@ -325,7 +342,7 @@ static void clear_timeout() {
 	alarm(0);
 }
 
-static void sigalrm_timeout(int signum) {
+static void sigalrm_timeout(int signum, siginfo_t *siginfo, void *context) {
 	siglongjmp(env, 1);
 }
 
