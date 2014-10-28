@@ -38,6 +38,21 @@ void print_hdr(struct stcp_hdr *hdr) {
 			(hdr->flags & STCP_ACK)? "ACK " : "");
 }
 
+int valid_pkt(struct stcp_pkt *pkt) {
+	int valid = 1;
+
+	if(pkt == NULL) {
+		valid = 0;
+	} else if(pkt->hdr.flags != (pkt->hdr.flags & (STCP_FIN|STCP_SYN|STCP_ACK))) {
+		debug("Packet invalid: unknown flags: %hx\n", pkt->hdr.flags);
+		valid = 0;
+	} else if(pkt->dlen > STCP_MAX_DATA) {
+		debug("Packet invalid: dlen too large: %d\n", pkt->dlen);
+		valid = 0;
+	}
+	return valid;
+}
+
 int _valid_SYNACK(struct stcp_pkt *pkt, uint32_t sent_seq) {
 	if(!(pkt->hdr.flags & (STCP_SYN | STCP_ACK))) {
 		error("Packet flags: SYN and ACK not set!\n");
@@ -402,8 +417,14 @@ int recvfrom_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 	ntoh_hdr(&pkt->hdr);
 	/* set data length */
 	pkt->dlen = rv - sizeof(struct stcp_hdr);
-	if(rv > 0 && rv < sizeof(struct stcp_hdr)) {
-		rv = 0;
+	if(rv > 0) {
+		if(rv < sizeof(struct stcp_hdr) || rv > STCP_MAX_SEG) {
+			/* Received datagram is too small or too large to be STCP */
+			rv = 0;
+		} else {
+			/* might be valid */
+			rv = valid_pkt(pkt);
+		}
 	}
 	return rv;
 }
@@ -415,8 +436,14 @@ int recv_pkt(int sockfd, struct stcp_pkt *pkt, int flags) {
 	ntoh_hdr(&pkt->hdr);
 	/* set data length */
 	pkt->dlen = rv - sizeof(struct stcp_hdr);
-	if(rv > 0 && rv < sizeof(struct stcp_hdr)) {
-		rv = 0;
+	if(rv > 0) {
+		if(rv < sizeof(struct stcp_hdr) || rv > STCP_MAX_SEG) {
+			/* Received datagram is too small or too large to be STCP */
+			rv = 0;
+		} else {
+			/* might be valid */
+			rv = valid_pkt(pkt);
+		}
 	}
 	return rv;
 }

@@ -87,6 +87,14 @@ void build_pkt(struct stcp_pkt *pkt, uint32_t seq, uint32_t ack, uint16_t win,
 		uint16_t flags, void *data, int dlen);
 
 /**
+ * Test if a packet is a valid STCP packet.
+ *
+ * @param pkt The received pkt in HOST order
+ * @return 1 if valid, 0 if invalid
+ */
+int valid_pkt(struct stcp_pkt *pkt);
+
+/**
  * Test if a packet is a valid SYN ACK in response to a SYN. SYN and ACK
  * flags should be set, ack # should be sent_seq + 1, and data field
  * should contain a port.
@@ -164,7 +172,7 @@ int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
  *
  * @param pkt Will be returned in host order
  * @return -1: on system call error, check errno
- *          0: if the packet is too small
+ *          0: if the packet is too small or is invalid
  *         >0: if packet is valid
  */
 int recv_pkt(int sockfd, struct stcp_pkt *pkt, int flags);
