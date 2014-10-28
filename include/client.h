@@ -61,4 +61,6 @@ void *runConsumer(void *args);
 */
 unsigned int sampleExpDist(unsigned int mean);
 
+int bitsSet(unsigned long mask);
+
 #endif
