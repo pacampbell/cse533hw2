@@ -91,6 +91,7 @@ Process* get_process_by_pid(Process *processes, int pid) {
 				found = node;
 				break;
 			}
+			node = node->next;
 		}
 	}
 	return found;
