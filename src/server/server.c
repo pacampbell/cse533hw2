@@ -15,11 +15,32 @@ int main(int argc, char *argv[]) {
 		// Get a list interfaces
 		interfaces = discoverInterfaces(&config, BIND_INTERFACE);
 		if(size(interfaces)) {
+			/* Setup some basic signals */
+			struct sigaction sigac_child;
+			struct sigaction sigac_alarm;
+			/* Zero out memory */
+			memset(&sigac_child, '\0', sizeof(sigac_child));
+			memset(&sigac_alarm, '\0', sizeof(sigac_alarm));
+			/* Set values */
+			sigac_child.sa_sigaction = &sigchld_handler;
+			sigac_child.sa_flags = SA_SIGINFO;
+			sigac_alarm.sa_sigaction = &sigalrm_timeout;
+			sigac_alarm.sa_flags = SA_SIGINFO;
+			/* Set the sigactions */
+			if(sigaction(SIGCHLD, &sigac_child, NULL) < 0) {
+				error("Unable to set SIGCHLD sigaction.\n");
+				goto clean_up;
+			}
+			if(sigaction(SIGALRM, &sigac_alarm, NULL)) {
+				error("Unable to set SIGALRM sigaction.\n");
+				goto clean_up;
+			}
 			/* Start the servers main loop */
 			run(interfaces, &config);
 		} else {
 			warn("No interfaces were bound to. Aborting program.\n");
 		}
+clean_up:
 		/* Clean up memory */
 		debug("Freeing interfaces list - %d.\n", (int)getpid());
 		destroy_interfaces(&interfaces);
@@ -71,6 +92,7 @@ void run(Interface *interfaces, Config *config) {
 				debug("Detected connection on interface: <%s> %s\n", node->name, node->ip_address);
 				if(setjmp(env) != 0) {
 					warn("Interface <%s> %s timed out waiting to receive SYN.\n", node->name, node->ip_address);
+					node = node->next;
 					continue;
 				} else {
 					set_timeout(10);
@@ -135,6 +157,7 @@ void run(Interface *interfaces, Config *config) {
 					}
 				} else {
 					/* IF I got here then what? */
+					warn("IF I GOT HERE THEN WHAT?\n");
 				}
 			}
 			node = node->next;
@@ -143,10 +166,8 @@ void run(Interface *interfaces, Config *config) {
 }
 
 int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
-	// TODO: Add signal handler for sigchild, to remove process from process list
 	int pid;
 	Interface *interface = NULL;
-	signal(SIGCHLD, sigchld_handler);
 	switch(pid = fork()) {
 		case -1:
 			/* Failed */
@@ -316,23 +337,38 @@ clean_up:
 	}
 }
 
-static void sigchld_handler(int signum) {
+static void sigchld_handler(int signum, siginfo_t *siginfo, void *context) {
     int pid;
     Process *process = NULL;
-    while ((pid = waitpid(-1, NULL, WNOHANG)) != -1) {
-        process = get_process_by_pid(processes, pid);
-        if(process != NULL) {
-        	if(remove_process(&processes, process)) {
-        		info("Successfuly removed the process %d\n", (int)pid);
-        	}
-        } else {
-        	warn("Unable to find process with pid: %d\n", (int)pid);
-        }
+    while(true) {
+    	pid = waitpid(-1, NULL, WNOHANG);
+    	if(pid == 0) {
+    		// No children have exited
+    		warn("No children have exited\n");
+    		break;
+    	} else if(pid == -1) {
+    		if(errno == EINTR) {
+    			// Got interrupted by another signal
+    			warn("Signal got interrupted\n");
+    			continue;
+    		}
+    		// Otherwise something bad happened so break out of loop
+    		error("Wait pid returned -1\n");
+    		break;
+    	} else {
+    		process = get_process_by_pid(processes, pid);
+	        if(process != NULL) {
+	        	if(remove_process(&processes, process)) {
+	        		error("Successfuly removed the process %d\n", (int)pid);
+	        	}
+	        } else {
+	        	warn("Unable to find process with pid: %d\n", (int)pid);
+	        }
+    	}
     }
 }
 
 static void set_timeout(int nsec) {
-	signal(SIGALRM, sigalrm_timeout);
 	if(alarm(nsec) != 0) {
 		warn("Alarm was already set with sec = %d\n", nsec);
 	}
@@ -342,7 +378,7 @@ static void clear_timeout() {
 	alarm(0);
 }
 
-static void sigalrm_timeout(int signum) {
+static void sigalrm_timeout(int signum, siginfo_t *siginfo, void *context) {
 	siglongjmp(env, 1);
 }
 

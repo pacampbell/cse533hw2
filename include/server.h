@@ -53,12 +53,12 @@ void childprocess(Process *process, struct stcp_pkt *pkt);
  * Handles SIG_CHILD from forked processes. When this signal is
  * received the process from the Processes list will be removed.
  */
-static void sigchld_handler(int signum);
+static void sigchld_handler(int signum, siginfo_t *siginfo, void *context);
 
 /**
  * Handles the timout from sigalarm
  */
-static void sigalrm_timeout(int signum);
+static void sigalrm_timeout(int signum, siginfo_t *siginfo, void *context);
 
 /**
  * Sets the timeout for sigalrm.
