@@ -222,6 +222,14 @@ Elem *win_add(Window *win, Elem *elem);
 Elem *win_oldest(Window *win);
 
 /**
+ * Returns the reference to the current end of the window.
+ * The end is the next Elem after win->end
+ * @param win  The Window
+ * @return pointer to the end elem.
+ */
+Elem *win_end(Window *win);
+
+/**
  * Removes the oldest Elem inside the Window win.
  * @param win  The Window
  */

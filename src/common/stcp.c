@@ -483,10 +483,23 @@ Elem *win_oldest(Window *win) {
 	if(win_empty(win)) {
 		debug("Tried to get an elem when the Window was empty!\n");
 	} else {
-		/* Copy the elem into the ending index and mark it as valid */
 		oldest = &win->buf[win->start];
 	}
 	return oldest;
+}
+
+// Elem *win_newest(Window *win) {
+// 	Elem *newest = NULL;
+// 	if(win_empty(win)) {
+// 		debug("Tried to get an elem when the Window was empty!\n");
+// 	} else {
+// 		newest = &win->buf[win->end];
+// 	}
+// 	return newest;
+// }
+
+Elem *win_end(Window *win) {
+	return &win->buf[win->end];
 }
 
 void win_clear(Window *win) {
@@ -513,8 +526,20 @@ Elem *win_add_oor(Window *win, Elem *elem) {
 
 	/* see it we can fit this offset */
 	if(fwdoff == 0) {
+		Elem *temp;
 		/* we can just use regular add */
 		newelem = win_add(win, elem);
+		/* TODO: advance past already buffered data */
+		temp = win_end(win);
+		while((temp->valid) && (temp->pkt.hdr.seq == win->next_seq)) {
+			debug("Added missing seq: %u, moving window end to send cumulative ACK\n", win->next_seq - 1);
+			/* Advance the end index and increment our elem count */
+			win->count += 1;
+			win->end = (win->end + 1) % win->size;
+			win->next_seq += 1;
+			temp = win_end(win);
+		}
+
 	} else if(fwdoff < win_available(win)) {
 		Elem *newelem = win_get(win, fwdoff);
 		if(newelem->valid) {
