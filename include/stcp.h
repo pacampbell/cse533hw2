@@ -107,7 +107,7 @@ int _valid_SYNACK(struct stcp_pkt *pkt, uint32_t sent_seq);
  * @param sock   	The stcp_sock to initialize
  * @return 			0 on success or -1 on error.
  */
-int stcp_socket(int sockfd, uint16_t win_size, struct stcp_sock *sock);
+int stcp_socket(int sockfd, uint16_t win_size, struct stcp_sock *stcp);
 
 /*
  * Free all memory associated with this stcp socket and close the
@@ -116,7 +116,7 @@ int stcp_socket(int sockfd, uint16_t win_size, struct stcp_sock *sock);
  * @param sock  A stcp_sock initialized by stcp_socket
  * @return 0 on successful connection or -1 on error.
  */
-int stcp_close(struct stcp_sock *sock);
+int stcp_close(struct stcp_sock *stcp);
 
 /*
  * Initialize a stcp connection to the server using the 3 way handshake
@@ -125,7 +125,7 @@ int stcp_close(struct stcp_sock *sock);
  * @param file  The name of the file to download
  * @return 0 on successful connection or -1 on error.
  */
-int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *file);
+int stcp_connect(struct stcp_sock *stcp, struct sockaddr_in *serv_addr, char *file);
 
 
 /*
@@ -136,7 +136,7 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
  *			 0 if the FIN was received
  *			>0 if we are waiting for more data
  */
-int stcp_client_recv(struct stcp_sock *sock);
+int stcp_client_recv(struct stcp_sock *stcp);
 
 /*
  * Read from the Window buffer.

@@ -58,7 +58,7 @@ int _valid_SYNACK(struct stcp_pkt *pkt, uint32_t sent_seq) {
 	return 1;
 }
 
-int stcp_socket(int sockfd, uint16_t win_size, struct stcp_sock *sock) {
+int stcp_socket(int sockfd, uint16_t win_size, struct stcp_sock *stcp) {
 	int err;
 	pthread_mutexattr_t attr;
 
@@ -70,15 +70,15 @@ int stcp_socket(int sockfd, uint16_t win_size, struct stcp_sock *sock) {
 		error("stcp_socket invalid win_size: %hu\n", win_size);
 		return -1;
 	}
-	if(sock == NULL) {
+	if(stcp == NULL) {
 		error("stcp_socket passed NULL stcp_sock\n");
 		return -1;
 	}
 
 	/* zero out the struct */
-	memset(sock, 0, sizeof(struct stcp_sock));
+	memset(stcp, 0, sizeof(struct stcp_sock));
 
-	sock->sockfd = sockfd;
+	stcp->sockfd = sockfd;
 
 	/* Use error checking mutex :) */
 	if ((err = pthread_mutexattr_init(&attr)) != 0) {
@@ -90,46 +90,45 @@ int stcp_socket(int sockfd, uint16_t win_size, struct stcp_sock *sock) {
 		return -1;
 	}
 	/* Initialize the Producer/Consumer mutex */
-	if((err = pthread_mutex_init(&sock->mutex, &attr)) != 0) {
+	if((err = pthread_mutex_init(&stcp->mutex, &attr)) != 0) {
 		error("pthread_mutex_init: %s\n", strerror(err));
 		return -1;
 	}
 	if ((err = pthread_mutexattr_destroy(&attr)) != 0) {
 		error("pthread_mutexattr_destroy: %s\n", strerror(err));
-		pthread_mutex_destroy(&sock->mutex);
+		pthread_mutex_destroy(&stcp->mutex);
 		return -1;
 	}
 	/* Init sliding window */
-/******/
-/***TODO initial seq***/
-	if(win_init(&sock->win, win_size, 0) < 0) {
+	if(win_init(&stcp->win, win_size, 0) < 0) {
 		error("Failed to initialize sliding window.\n");
-		pthread_mutex_destroy(&sock->mutex);
+		pthread_mutex_destroy(&stcp->mutex);
 		return -1;
 	}
 	return 0;
 }
 
-int stcp_close(struct stcp_sock *sock){
+int stcp_close(struct stcp_sock *stcp){
 	int err;
 	/* Destroy the Producer/Consumer mutex */
-	if((err = pthread_mutex_destroy(&sock->mutex)) != 0) {
+	if((err = pthread_mutex_destroy(&stcp->mutex)) != 0) {
 		error("pthread_mutex_destroy: %s\n", strerror(err));
 		return -1;
 	}
 	/* cleanup window */
-	win_destroy(&sock->win);
+	win_destroy(&stcp->win);
 	/* close socket */
-	if(sock->sockfd >= 0){
-		return close(sock->sockfd);
+	if(stcp->sockfd >= 0){
+		return close(stcp->sockfd);
 	}
 	return 0;
 }
 
-int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *file) {
+int stcp_connect(struct stcp_sock *stcp, struct sockaddr_in *serv_addr, char *file) {
 	int len, sendSYN;
 	uint16_t newport;
 	uint32_t start_seq = 0;
+	uint32_t reply_seq; /* this is set to the seq # in the SYN ACK reply */
 	struct stcp_pkt sent_pkt, reply_pkt, ack_pkt;
 	/* 1s timeout for connect + Select stuff */
 	int retries = 0, max_retries = 5, timeout = 1;
@@ -139,7 +138,7 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 
 	/* init first SYN */
 	sendSYN = 1;
-	build_pkt(&sent_pkt, start_seq, 0, WIN_ADV(sock->win), STCP_SYN, file, strlen(file));
+	build_pkt(&sent_pkt, start_seq, 0, WIN_ADV(stcp->win), STCP_SYN, file, strlen(file));
 	/* attempt to connect backed by timeout */
 	while (1) {
 		if(sendSYN) {
@@ -147,7 +146,7 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 			/* send first SYN containing the filename in the data field */
 			printf("SYN pkt:");
 			print_hdr(&sent_pkt.hdr);
-			len = send_pkt(sock->sockfd, &sent_pkt, 0);
+			len = send_pkt(stcp->sockfd, &sent_pkt, 0);
 			if(len < 0) {
 				error("Sending SYN packet: %s\n", strerror(errno));
 				return -1;
@@ -157,15 +156,15 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 			}
 		}
 		FD_ZERO(&rset);
-		FD_SET(sock->sockfd, &rset);
-		nfds = sock->sockfd + 1;
+		FD_SET(stcp->sockfd, &rset);
+		nfds = stcp->sockfd + 1;
 		if(select(nfds, &rset, NULL, NULL, &tv) < 0) {
 			error("Select: %s", strerror(errno));
 			return -1;
 		}
-		if(FD_ISSET(sock->sockfd, &rset)) {
+		if(FD_ISSET(stcp->sockfd, &rset)) {
 			/* Read response from server */
-			len = recv_pkt(sock->sockfd, &reply_pkt, 0);
+			len = recv_pkt(stcp->sockfd, &reply_pkt, 0);
 			if(len < 0) {
 				error("Recv from %s:%hu error: %s\n",
 						inet_ntoa(serv_addr->sin_addr), ntohs(serv_addr->sin_port),
@@ -182,7 +181,7 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 				newport = ntohs(*p);
 				info("Received SYN+ACK with new port: %hu\n", newport);
 				/* update the initial seq */
-				sock->win.next_seq = reply_pkt.hdr.seq + 1;
+				reply_seq = reply_pkt.hdr.seq;
 				/* break out out the loop */
 				break;
 			} else {
@@ -206,17 +205,19 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 			sendSYN = 1;
 		}
 	}
+	/* update our Receive window Seq */
+	stcp->win.next_seq = reply_seq + 1;
 	/* Reconnect to the new port */
 	serv_addr->sin_port = htons(newport);
-	if(udpConnect(sock->sockfd, serv_addr) < 0) {
+	if(udpConnect(stcp->sockfd, serv_addr) < 0) {
 		return -1;
 	}
 	/* init ACK packet */
-	build_pkt(&ack_pkt, 0, sock->win.next_seq, WIN_ADV(sock->win), STCP_ACK, NULL, 0);
+	build_pkt(&ack_pkt, 0, stcp->win.next_seq, WIN_ADV(stcp->win), STCP_ACK, NULL, 0);
 	debug("Sending ACK to server ");
 	print_hdr(&ack_pkt.hdr);
 	/* Send ACK packet to server */
-	len = send_pkt(sock->sockfd, &ack_pkt, 0);
+	len = send_pkt(stcp->sockfd, &ack_pkt, 0);
 	if(len < 0) {
 		error("Sending ACK packet: %s\n", strerror(errno));
 		return -1;
