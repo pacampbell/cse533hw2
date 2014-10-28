@@ -152,15 +152,12 @@ bool chooseIPs(Config *config, struct in_addr *server_ip,
 
 			if((ip_add & net_mask) == (server_ip->s_addr & net_mask)) {
 				/* Server IP and this interface IP are on the same subnet */
-				info("IPclient and IPserver share subnet: %s/%d\n", temp->ip_address, bitsSet(net_mask));
+				debug("IPclient and IPserver share subnet: %s/%d\n", temp->ip_address, bitsSet(net_mask));
 				local = true;
 				if(ntohl(net_mask) > ntohl(longest)) {
-					info("HOST ORDER: net_mask=%lx, longets=%lx\n", net_mask, longest);
-					info("PREV IPclient: %s\n", inet_ntoa(*client_ip));
 					longest = net_mask;
 					long_if = temp;
 					client_ip->s_addr = ip_add;
-					info("NEW IPclient: %s\n", inet_ntoa(*client_ip));
 				}
 			}
 		}
