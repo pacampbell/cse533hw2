@@ -24,6 +24,7 @@
 
 #define SERVER_BUFFER_SIZE 2048
 #define MAX_HANDSHAKE_ATTEMPTS 3
+#define MAX_TIMEOUT_ATTEMPTS 5
 
 /**
  * Starts the main loop of the server.
