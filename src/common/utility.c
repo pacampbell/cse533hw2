@@ -108,14 +108,15 @@ int createClientSocket(struct sockaddr_in *serv_addr,
 
 	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 	if(sockfd < 0) {
-		perror("createClientSocket: socket");
+		error("Failed to create socket: %s\n", strerror(errno));
 		return -1;
 	}
 	/* set the socket SO_DONTROUTE option if we're local */
 	if(local) {
+		info("Setting the option SO_DONTROUTE connection socket\n");
 		if(setsockopt(sockfd, SOL_SOCKET, SO_DONTROUTE, &optval,
 						sizeof(optval)) < 0) {
-			perror("createClientSocket: setsockopt");
+			error("Failed to setsockopt: %s\n", strerror(errno));
 			close(sockfd);
 			return -1;
 		}
@@ -123,13 +124,13 @@ int createClientSocket(struct sockaddr_in *serv_addr,
 	/* bind socket to the client's address */
 	if(bind(sockfd, (struct sockaddr*)client_addr,
 			sizeof(struct sockaddr_in)) < 0) {
-		perror("createClientSocket: bind");
+		error("Failed to bind: %s\n", strerror(errno));
 		close(sockfd);
 		return -1;
 	}
 	/* Get the port we are bound to */
 	if(getsockname(sockfd, (struct sockaddr*)client_addr, &len) < 0) {
-		perror("createClientSocket: getsockname");
+		error("Failed to getsockname: %s\n", strerror(errno));
 		close(sockfd);
 		return -1;
 	}
@@ -151,13 +152,13 @@ int udpConnect(int sockfd, struct sockaddr_in *peer) {
 	/* connect the UDP socket to the peer address */
 	if(connect(sockfd, (struct sockaddr*)peer,
 			sizeof(struct sockaddr_in)) < 0) {
-		perror("udpConnect: connect");
+		error("Failed to connect: %s\n", strerror(errno));
 		return -1;
 	}
 	/* Get the peername we connected to */
 	len = sizeof(struct sockaddr_in);
 	if(getpeername(sockfd, (struct sockaddr*)peer, &len) < 0) {
-		perror("udpConnect: getpeername");
+		error("Failed to getpeername: %s\n", strerror(errno));
 		return -1;
 	}
 	/* print the IP and port we connected to */
@@ -186,11 +187,11 @@ int set_nonblocking(int sockfd) {
 	int fileflags;
 
 	if((fileflags = fcntl(sockfd, F_GETFL, 0)) == -1) {
-		perror("fcntl F_GETFL");
+		error("Failed to get file flags, fcntl: %s\n", strerror(errno));
 		return -1;
 	}
 	if (fcntl(sockfd, F_SETFL, fileflags | O_NONBLOCK) == -1)  {
-		perror("fcntl F_SETFL, O_NONBLOCK");
+		error("Failed to set O_NONBLOCK, fcntl: %s\n", strerror(errno));
 		return -1;
 	}
 	return 0;
@@ -200,11 +201,11 @@ int set_blocking(int sockfd) {
 	int fileflags;
 
 	if((fileflags = fcntl(sockfd, F_GETFL, 0)) == -1) {
-		perror("fcntl F_GETFL");
+		error("Failed to get file flags, fcntl: %s\n", strerror(errno));
 		return -1;
 	}
 	if (fcntl(sockfd, F_SETFL, fileflags & ~O_NONBLOCK) == -1)  {
-		perror("fcntl F_SETFL, O_NONBLOCK");
+		error("Failed to remove O_NONBLOCK, fcntl: %s\n", strerror(errno));
 		return -1;
 	}
 	return 0;
