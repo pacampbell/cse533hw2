@@ -232,9 +232,10 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 	info("Searching for file: '%s'\n", file);
 	// Attempt to open the file
 	FILE *fp = fopen(file, "r");
+	int fd;
 	if(fp != NULL) {
 		int sock = -1;
-		int read = 0;
+		int nread = 0;
 		bool samesub = false;
 		struct stcp_pkt ack;
 		struct sockaddr_in client_addr, server_addr;
@@ -315,11 +316,12 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 
 			/* Connection established start sending file */
 			/* TODO: Must mask SIGALRM during read and make sure it is in the Window */
-			while((read = fread(buffer, sizeof(unsigned char), STCP_MAX_DATA, fp)) > 0) {
-				debug("Read %d bytes from the file '%s'\n", read, file);
+			fd = fileno(fp);
+			while((nread = read(fd, buffer, STCP_MAX_DATA)) > 0) {
+				debug("Read %d bytes from the file '%s'\n", nread, file);
 				// Transmit payload to server
 				len = server_transmit_payload2(sock, pkt->hdr.seq + 1, 0, pkt,
-					process, 0, buffer, read);
+					process, 0, buffer, nread);
 				// If the read length and the sent length are not the same
 				// Something probably went wrong
 
@@ -327,19 +329,20 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 //DEBUG: src/server/server.c:server_transmit_payload:352 Sent -1 bytes to the client
 //ERROR: src/server/server.c:childprocess:248 Read len = 9, Sent len = -13 (they should match)
 
-				if(read != (len - sizeof(pkt->hdr))) {
+				if(nread != (len - sizeof(pkt->hdr))) {
 					error("Read len = %d, Sent len = %d (they should match)\n",
-						read, (len - (int)sizeof(pkt->hdr)));
+						nread, (len - (int)sizeof(pkt->hdr)));
 					break;
 				}
 			}
-			if(ferror(fp)) {
-				error("Fatal error when reading from '%s': %s\n", file, strerror(ferror(fp)));
+			if(nread < 0) {
+				error("Fatal error when reading from '%s': %s\n", file, strerror(errno));
 				goto clean_up;
 			}
+			warn("Read EOF nread=%d, Sending FIN to client\n", nread);
 			// Send the fin packet
 			len = server_transmit_payload2(sock, pkt->hdr.seq + 1, 0, pkt, 
-				process, STCP_FIN, buffer, read);
+				process, STCP_FIN, NULL, 0);
 			// TODO: Receive the FIN_ACK from cleint
 			recv_pkt(sock, &ack, 0);
 		} else {
