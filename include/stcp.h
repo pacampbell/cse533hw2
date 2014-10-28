@@ -138,11 +138,16 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 int stcp_client_recv(struct stcp_sock *sock);
 
 /*
- * Read from the buffer and print to stdout.
+ * Read from the Window buffer.
  *
  * @param sock A stcp_sock initialized by the client for reading.
+ * @param buf  The buffer to copy data into.
+ * @param len  length of the provided buffer. Must be a multiple of STCP_MAX_DATA
+ * @return -1 on error
+ * 			0 on EOF
+ *			1 on success
  */
-int stcp_client_read(struct stcp_sock *sock);
+int stcp_client_read(struct stcp_sock *stcp, char *buf, int buflen, int *nread);
 
 /**
  * Wrappers for send functions.

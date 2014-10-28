@@ -303,52 +303,74 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 /**
  * This is called when the client wakes up.
  */
-int stcp_client_read(struct stcp_sock *stcp) {
-	int err, done = 0;
+int stcp_client_read(struct stcp_sock *stcp, char *buf, int buflen, int *nread) {
+	int err, eof, i;
 	Window *win = &stcp->win;
-	Elem *elem = NULL;
+	if(buf == NULL) {
+		error("Invalid argument buf cannot be NULL\n");
+		errno = EINVAL;
+		return -1;
+	}
+	if(nread == NULL) {
+		error("Invalid argument nread cannot be NULL\n");
+		errno = EINVAL;
+		return -1;
+	}
+	if(buflen < 0 || ((buflen % STCP_MAX_DATA) != 0)) {
+		error("Invalid argument buflen: %d\n", buflen);
+		errno = EINVAL;
+		return -1;
+	}
+	/* Intialize the number of byte copied into buf */
+	*nread = 0;
+	eof = 0;
 	/* Aquire mutex */
 	if((err = pthread_mutex_lock(&stcp->mutex)) != 0) {
 		error("pthread_mutex_lock: %s\n", strerror(err));
 		return -1;
 	}
-	/* while buff is not empty */
-	if(win_empty(win)){
-		debug("Consumer: No data to read from buffer.\n");
-	} else {
-		elem = win_oldest(win);
-		if(elem->pkt.hdr.flags & STCP_FIN) {
-			done = 1;
-		} else {
-			info("Consumer reading buffered data:\n");
-			while(!win_empty(win)) {
-				int i;
-				elem = win_oldest(win);
-
-				/* dump data to stdout */
-				for(i = 0; i < elem->pkt.dlen; ++i) {
-					putchar(elem->pkt.data[i]);
-				}
-				/* check if the pkt was a FIN */
-				if(elem->pkt.hdr.flags & STCP_FIN) {
-					done = 1;
-				}
-				/* remove the elem we just read */
-				win_remove(win);
+	/* Try to read data from the window */
+	while(!win_empty(win)) {
+		Elem *elem = win_oldest(win);
+		int dlen = elem->pkt.dlen;
+		if(*nread + dlen <= buflen) {
+			/* Copy data to buf */
+			memcpy(buf+*nread, elem->pkt.data, dlen);
+			*nread += dlen;
+			/* check if the pkt was a FIN */
+			if(elem->pkt.hdr.flags & STCP_FIN) {
+				eof = 1;
 			}
+			/* remove the elem we just read */
+			win_remove(win);
 		}
-		printf("\n");
-		if(done)
-			info("Consumer read EOF. Ending...\n");
-		else
-			info("Consumer printed current inorder data.\n");
+	}
+	if(*nread) {
+		info("Consumer: printing %d bytes of inorder data:\n", *nread);
+	} else {
+		debug("Consumer: No data to read from buffer.\n");
+	}
+	for(i = 0; i < *nread; ++i) {
+		/* Print out everything we copied into buf */
+		putchar(buf[i]);
+	}
+	if (eof) {
+		/* We read the last packet */
+		putchar('\n');
+		info("Consumer read EOF. Ending...\n");
+	} else {
+		if(*nread) {
+			putchar('\n');
+			info("Consumer printed %d bytes of inorder data.\n", *nread);
+		}
 	}
 	/* Release mutex */
 	if((err = pthread_mutex_unlock(&stcp->mutex)) != 0) {
 		error("pthread_mutex_unlock: %s\n", strerror(err));
 		return -1;
 	}
-	return done;
+	/* return 0 if read EOF else 1 */
+	return eof? 0:1;
 }
 
 int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,

@@ -215,8 +215,11 @@ void *runConsumer(void *arg) {
 	struct consumer_args *args = arg;
     struct stcp_sock *stcp = args->stcp;
 	unsigned int ms;
-	int err, oldtype, oldstate, done;
+	int err, oldtype, oldstate, rv;
 	int *retval;
+	char *read_buf;
+	int buflen, nread;
+
 	/* allocate space for our exit status */
 	if((retval = malloc(sizeof(int))) == NULL) {
 		error("Consumer: malloc failed\n");
@@ -230,6 +233,11 @@ void *runConsumer(void *arg) {
 		*retval = -1;
 		pthread_exit(retval);
 	}
+	buflen = STCP_MAX_DATA * stcp->win.size;
+	if((read_buf = malloc(buflen)) == NULL) {
+		error("Consumer: malloc failed\n");
+		pthread_exit(NULL);
+	}
 	/* set the seed for our uniform uniformly distributed RNG */
 	srand48(args->seed);
 	while(1) {
@@ -242,23 +250,30 @@ void *runConsumer(void *arg) {
 		if((err = pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate)) != 0) {
 			error("pthread_setcanceltype: %s\n", strerror(err));
 			*retval = -1;
+			free(read_buf);
 			pthread_exit(retval);
 		}
-		done = stcp_client_read(stcp);
+		/* Read data that the producer has buffered inorder */
+		rv = stcp_client_read(stcp, read_buf, buflen, &nread);
+		/* Now we can dump data to stdout */
+		if(rv < 0) {
+			/* some kind of error */
+			*retval = -1;
+			free(read_buf);
+			pthread_exit(retval);
+		} else if(rv == 0) {
+			/* EOF */
+			break;
+		}
 		/* Reenable cancelability */
 		if((err = pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &oldstate)) != 0) {
 			error("pthread_setcanceltype: %s\n", strerror(err));
 			*retval = -1;
+			free(read_buf);
 			pthread_exit(retval);
 		}
-		if(done < 0) {
-			/* some kind of error */
-			*retval = -1;
-		} else if (done) {
-			/* We got the FIN from the server and sent a FIN ACK */
-			break;
-		}
 	}
+	free(read_buf);
 	pthread_exit(retval);
 }
 
