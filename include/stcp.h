@@ -158,6 +158,14 @@ int stcp_client_recv(struct stcp_sock *stcp);
  */
 int stcp_client_read(struct stcp_sock *stcp, char *buf, int buflen, int *nread);
 
+/*
+ * Set the rate at which packets are artificially dropped on send and recv
+ *
+ * @param seed  To seed the RNG
+ * @param loss  The artificial drop rate
+ */
+void client_set_loss(unsigned int seed, double loss);
+
 /**
  * Wrappers for send functions.
  *

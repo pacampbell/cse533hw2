@@ -53,6 +53,8 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr, "stcp_socket failed\n");
 		exit(EXIT_FAILURE);
 	}
+	/* set the packet drop rate of send and recv */
+	client_set_loss(config.seed, config.loss);
 	/* Try to establish a connection to the server */
 	if(stcp_connect(&stcp, &serv_addr, config.filename) < 0) {
 		/* Unable to connect to server  */

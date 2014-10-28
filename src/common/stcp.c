@@ -1,5 +1,7 @@
 #include "stcp.h"
 
+int loss_thresh = 0;
+
 void build_pkt(struct stcp_pkt *pkt, uint32_t seq, uint32_t ack, uint16_t win,
 				uint16_t flags, void *data, int dlen) {
 	pkt->hdr.seq = seq;
@@ -270,8 +272,8 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 		error("Server disconnected during data transfer!\n");
 		done = -1;
 	} else if(len == 0) {
-		fprintf(stderr, "stcp_connect: recv_pkt failed to read any data\n");
-		done = -1;
+		/* The recv_pkt was invalid */
+		done = 0;
 	} else {
 		Elem *added;
 
@@ -387,9 +389,24 @@ int stcp_client_read(struct stcp_sock *stcp, char *buf, int buflen, int *nread) 
 	return eof? 0:1;
 }
 
+
+void client_set_loss(unsigned int seed, double loss) {
+	/* set the loss threshhold value for Sending AND receiving */
+	warn("Setting send/recv drop rate to %f%%\n", loss);
+	loss_thresh = loss * RAND_MAX;
+	/* set seed for RNG */
+	srand(seed);
+}
+
 int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 		struct sockaddr *dest_addr, socklen_t addrlen) {
 	int rv;
+	/* DROP */
+	if(rand() < loss_thresh) {
+		warn("Artificially dropped on sendto ");
+		print_hdr(&pkt->hdr);
+		return sizeof(struct stcp_hdr) + pkt->dlen;
+	}
 	/* convert stcp_hdr into network order */
 	hton_hdr(&pkt->hdr);
 	rv = sendto(sockfd, pkt, sizeof(struct stcp_hdr) + pkt->dlen, flags,
@@ -401,6 +418,12 @@ int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 
 int send_pkt(int sockfd, struct stcp_pkt *pkt, int flags) {
 	int rv;
+	/* DROP */
+	if(rand() < loss_thresh) {
+		warn("Artificially dropped on send ");
+		print_hdr(&pkt->hdr);
+		return sizeof(struct stcp_hdr) + pkt->dlen;
+	}
 	/* convert stcp_hdr into network order */
 	hton_hdr(&pkt->hdr);
 	rv = send(sockfd, pkt, sizeof(struct stcp_hdr) + pkt->dlen, flags);
@@ -415,6 +438,12 @@ int recvfrom_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 	rv = recvfrom(sockfd, pkt, STCP_MAX_SEG, flags, src_addr, addrlen);
 	/* convert stcp_hdr into host order */
 	ntoh_hdr(&pkt->hdr);
+	/* DROP */
+	if(rand() < loss_thresh) {
+		warn("Artificially dropped on recvfrom ");
+		print_hdr(&pkt->hdr);
+		return 0;
+	}
 	/* set data length */
 	pkt->dlen = rv - sizeof(struct stcp_hdr);
 	if(rv > 0) {
@@ -434,6 +463,12 @@ int recv_pkt(int sockfd, struct stcp_pkt *pkt, int flags) {
 	rv = recv(sockfd, pkt, STCP_MAX_SEG, flags);
 	/* convert stcp_hdr into host order */
 	ntoh_hdr(&pkt->hdr);
+	/* DROP */
+	if(rand() < loss_thresh) {
+		warn("Artificially dropped on recv ");
+		print_hdr(&pkt->hdr);
+		return 0;
+	}
 	/* set data length */
 	pkt->dlen = rv - sizeof(struct stcp_hdr);
 	if(rv > 0) {
