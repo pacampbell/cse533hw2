@@ -58,7 +58,8 @@ typedef struct {
 	uint16_t end;		/* Index of the next free elem		*/
 	uint16_t start;		/* Index of the oldest elem		*/
 	/* stuff specifically for receiving window */
-	uint32_t next_seq;	/* Sequence Number we expect to recv next */
+	uint32_t next_seq;	/* For RWIN: Sequence # we expect to recv next */
+						/* For SWIN: Sequence # we expect to buffer next */
 	/* stuff specifically for sending window */
 	uint32_t next_ack;	/* Acknowledgement Number we expect to recv next */
 	/* For Sending */
@@ -176,6 +177,22 @@ int recvfrom_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
  */
 
 #define WIN_ADV(win) ((win).size - (win).count)
+
+/**
+ * Allocate and initialize a sliding window
+ *
+ * @param win 			The Window
+ * @param win_size 		Max # of Elem in the window
+ * @param initial_seq 	Sender: The initial seq to send
+ 						Receiver: the initial seq to recv
+ * @return Window Elem count
+ */
+int win_init(Window *win, int win_size, uint32_t initial_seq);
+
+/**
+ * Free any memory associated with the Window win.
+ */
+void win_destroy(Window *win);
 
 /**
  * Number of elements inside the window.

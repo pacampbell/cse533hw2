@@ -99,12 +99,11 @@ int stcp_socket(int sockfd, uint16_t win_size, struct stcp_sock *sock) {
 		pthread_mutex_destroy(&sock->mutex);
 		return -1;
 	}
-	/* sliding window size */
-	sock->win.size = win_size;
-	/* Allocate space for the receiving window */
-	sock->win.buf = calloc(win_size, sizeof(Elem));
-	if(sock->win.buf == NULL) {
-		error("calloc: %s\n", strerror(errno));
+	/* Init sliding window */
+/******/
+/***TODO initial seq***/
+	if(win_init(&sock->win, win_size, 0) < 0) {
+		error("Failed to initialize sliding window.\n");
 		pthread_mutex_destroy(&sock->mutex);
 		return -1;
 	}
@@ -118,10 +117,8 @@ int stcp_close(struct stcp_sock *sock){
 		error("pthread_mutex_destroy: %s\n", strerror(err));
 		return -1;
 	}
-	/* free sliding window */
-	if(sock->win.buf != NULL) {
-		free(sock->win.buf);
-	}
+	/* cleanup window */
+	win_destroy(&sock->win);
 	/* close socket */
 	if(sock->sockfd >= 0){
 		return close(sock->sockfd);
@@ -170,8 +167,9 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 			/* Read response from server */
 			len = recv_pkt(sock->sockfd, &reply_pkt, 0);
 			if(len < 0) {
-				error("Connection refused. No server at %s:%hu\n",
-						inet_ntoa(serv_addr->sin_addr), ntohs(serv_addr->sin_port));
+				error("Recv from %s:%hu error: %s\n",
+						inet_ntoa(serv_addr->sin_addr), ntohs(serv_addr->sin_port),
+						strerror(errno));
 				return -1;
 			}
 			/* parse the new port from the server */
@@ -425,6 +423,24 @@ int recv_pkt(int sockfd, struct stcp_pkt *pkt, int flags) {
 /*
  * Start Circle Buffer Functions
  */
+int win_init(Window *win, int win_size, uint32_t initial_seq) {
+	/* sliding window size */
+	win->size = win_size;
+	win->next_seq = initial_seq;
+	/* Allocate space for the receiving window */
+	win->buf = calloc(win_size, sizeof(Elem));
+	if(win->buf == NULL) {
+		error("calloc: %s\n", strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+void win_destroy(Window *win) {
+	if(win->buf != NULL) {
+		free(win->buf);
+	}
+}
 
 int win_count(Window *win) {
 	return win->count;
