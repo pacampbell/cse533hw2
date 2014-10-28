@@ -31,25 +31,31 @@ close:
 
 bool parseClientConfig(char *path, Config *config) {
 	bool success = false;
+	FILE *config_file;
 	if(path != NULL && config != NULL) {
-		FILE *config_file = fopen(path, "r");
-		if(config_file != NULL) {
+		config_file = fopen(path, "r");
+		if(config_file == NULL) {
+			error("Failed to open config file '%s' :%s\n", path, strerror(errno));
+			return false;
+		} else {
 			/* Atempt to read the file line by line */
 			char line[BUFFER_SIZE];
 			/* Read in the server IP address value */
 			if(fgets(line, BUFFER_SIZE, config_file) != NULL) {
 				/* convert IP to a struct in_addr */
 				if(inet_aton(line, &config->serv_addr) == 0) {
-					goto close;
+					error("Config file: failed to parse IP '%s'\n", line);
+					fclose(config_file);
+					return false;
 				}
 			} else {
-				goto close;
+				goto fgets_error;
 			}
 			/* Read in the server port value */
 			if(fgets(line, BUFFER_SIZE, config_file) != NULL) {
 				config->port = (unsigned short) atoi(line);
 			} else {
-				goto close;
+				goto fgets_error;
 			}
 			/* Read in the filename to be transferred */
 			if(fgets(config->filename, BUFFER_SIZE, config_file) != NULL) {
@@ -58,40 +64,42 @@ bool parseClientConfig(char *path, Config *config) {
 				if(config->filename[len-1] == '\n')
 					config->filename[len-1] = '\0';
 			} else {
-				goto close;
+				goto fgets_error;
 			}
 			/* Read in the window size */
 			if(fgets(line, BUFFER_SIZE, config_file) != NULL) {
 				config->win_size = (unsigned int) atoi(line);
 			} else {
-				goto close;
+				goto fgets_error;
 			}
 			/* Read in the random seed value */
 			if(fgets(line, BUFFER_SIZE, config_file) != NULL) {
 				config->seed = (unsigned int) atoi(line);
 			} else {
-				goto close;
+				goto fgets_error;
 			}
 			/* Read in the probability loss value */
 			if(fgets(line, BUFFER_SIZE, config_file) != NULL) {
 				config->loss = atof(line);
 			} else {
-				goto close;
+				goto fgets_error;
 			}
 			/* Read in the mean of the exp. dist. value */
 			if(fgets(line, BUFFER_SIZE, config_file) != NULL) {
 				config->mean = (unsigned int) atoi(line);
 			} else {
-				goto close;
+				goto fgets_error;
 			}
 			/* If we got this far must be a success */
 			success = true;
-close:
 			/* Close the file handle */
 			fclose(config_file);
 		}
 	}
 	return success;
+fgets_error:
+	fclose(config_file);
+	return false;
 }
 
 int createServer(char *address, unsigned int port) {

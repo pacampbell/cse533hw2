@@ -318,50 +318,44 @@ int stcp_client_recv(struct stcp_sock *stcp) {
  * This is called when the client wakes up.
  */
 int stcp_client_read(struct stcp_sock *stcp) {
-	int err, done = 0, printed = 0;
+	int err, done = 0;
+	Window *win = &stcp->win;
 	Elem *elem = NULL;
 	/* Aquire mutex */
 	if((err = pthread_mutex_lock(&stcp->mutex)) != 0) {
 		error("pthread_mutex_lock: %s\n", strerror(err));
 		return -1;
 	}
-	/* while buff is readable */
-	while(stcp->win.count > 0) {
-		elem = &stcp->win.buf[stcp->win.start];
-		if(elem->valid) {
-			int i;
-			if(!printed) {
-				info("Consumer reading buffered data:\n");
-				printed = 1;
-			}
-			/* dump data to stdout */
-			for(i = 0; i < elem->pkt.dlen; ++i){
-				putchar(elem->pkt.data[i]);
-			}
-			/* Advance the read head */
-			elem->valid = 0;
-			stcp->win.count -= 1;
-			stcp->win.start = (stcp->win.start + 1) % stcp->win.size;
-			/* check if the pkt was a FIN */
-			if(elem->pkt.hdr.flags & STCP_FIN) {
-				printf("\n");
-				info("Consumer read EOF. Ending...\n");
-				done = 1;
-				break;
-			} else {
-				done = 0;
-			}
-
+	/* while buff is not empty */
+	if(win_empty(win)){
+		debug("Consumer: No data to read from buffer.\n");
+	} else {
+		elem = win_oldest(win);
+		if(elem->pkt.hdr.flags & STCP_FIN) {
+			done = 1;
 		} else {
-			error("Count > 0 but circle buff elem is not valid!\n");
-			done = -1;
-			break;
+			info("Consumer reading buffered data:\n");
+			while(!win_empty(win)) {
+				int i;
+				elem = win_oldest(win);
+
+				/* dump data to stdout */
+				for(i = 0; i < elem->pkt.dlen; ++i) {
+					putchar(elem->pkt.data[i]);
+				}
+				/* check if the pkt was a FIN */
+				if(elem->pkt.hdr.flags & STCP_FIN) {
+					done = 1;
+				}
+				/* remove the elem we just read */
+				win_remove(win);
+			}
 		}
-	}
-	if(printed && !done) {
 		printf("\n");
-		info("Consumer printed current inorder data.\n");
-		printed = 1;
+		if(done)
+			info("Consumer read EOF. Ending...\n");
+		else
+			info("Consumer printed current inorder data.\n");
 	}
 	/* Release mutex */
 	if((err = pthread_mutex_unlock(&stcp->mutex)) != 0) {

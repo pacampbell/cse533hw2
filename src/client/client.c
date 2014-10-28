@@ -29,7 +29,8 @@ int main(int argc, char *argv[]) {
 	/* Attempt to parse the config */
 	if(!parseClientConfig(path, &config)) {
 		/* The config parsing failed */
-		debug("Failed to parse: %s\n", path);
+		error("Failed to parse config file: %s\n", path);
+		exit(EXIT_FAILURE);
 	}
 	debug("Server Address: %s\n", inet_ntoa(config.serv_addr));
 	debug("Port: %hu\n", config.port);
