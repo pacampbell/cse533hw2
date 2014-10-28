@@ -44,7 +44,9 @@ bool remove_node(Interface **list, Interface *node) {
 				}
 			} else {
 				node->prev->next = node->next;
-				node->next->prev = node->prev;
+				if(node->next != NULL) {
+					node->next->prev = node->prev;
+				}
 			}
 			free(node);
 			break;

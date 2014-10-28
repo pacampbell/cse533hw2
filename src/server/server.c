@@ -114,6 +114,14 @@ void run(Interface *interfaces, Config *config) {
 					}
 				}
 				if(server_valid_syn(valid_pkt, &pkt)) {
+					sigset_t sigchld_mask;
+
+					sigemptyset(&sigchld_mask);
+					sigaddset(&sigchld_mask, SIGCHLD);
+					/* Block SIGCHLD unitl we add the child procces to the list */
+					if(sigprocmask(SIG_BLOCK, &sigchld_mask, NULL) < 0){
+						error("Error blocking SIGCHLD sigprocmask: %s\n", strerror(errno));
+					}
 					// Packet was valid
 					// Check if process already exists for child
 					if((process = get_process(processes, node->ip_address, connection_addr.sin_port)) == NULL) {
@@ -157,9 +165,12 @@ void run(Interface *interfaces, Config *config) {
 						// TODO: The process already exists; What to do?
 						info("Process already exists for %s:%d\n", process->ip_address, process->port);
 					}
+					/* Unblock SIGCHLD In the Parent Server */
+					if(sigprocmask(SIG_UNBLOCK, &sigchld_mask, NULL) < 0){
+						error("Error unblocking SIGCHLD sigprocmask: %s\n", strerror(errno));
+					}
 				} else {
-					/* IF I got here then what? */
-					warn("IF I GOT HERE THEN WHAT?\n");
+					debug("Ignoring invalid SYN pakcet.\n");
 				}
 			}
 			node = node->next;
@@ -170,14 +181,6 @@ void run(Interface *interfaces, Config *config) {
 int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 	int pid;
 	Interface *interface = NULL;
-	sigset_t sigchld_mask;
-
-	sigemptyset(&sigchld_mask);
-	sigaddset(&sigchld_mask, SIGCHLD);
-	/* Block SIGCHLD unitl we add the child procces to the list */
-	if(sigprocmask(SIG_BLOCK, &sigchld_mask, NULL) < 0){
-		error("Error blocking SIGCHLD sigprocmask: %s\n", strerror(errno));
-	}
 
 	switch(pid = fork()) {
 		case -1:
@@ -212,14 +215,11 @@ int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 			exit(EXIT_SUCCESS);
 			break;
 		default:
+			/* TODO: ADD HERE */
 			/* In parent */
 			process->pid = pid;
 			info("Main Server - Child PID: %d\n", pid);
 			break;
-	}
-	/* Unblock SIGCHLD */
-	if(sigprocmask(SIG_UNBLOCK, &sigchld_mask, NULL) < 0){
-		error("Error unblocking SIGCHLD sigprocmask: %s\n", strerror(errno));
 	}
 	return pid;
 }
@@ -360,19 +360,19 @@ static void sigchld_handler(int signum, siginfo_t *siginfo, void *context) {
 		process = get_process_by_pid(processes, pid);
 		if(process != NULL) {
 			if(remove_process(&processes, process)) {
-				error("Successfuly removed the process %d\n", (int)pid);
+				info("Successfuly removed the process %d\n", (int)pid);
 			}
 		} else {
-			warn("Unable to find process with pid: %d\n", (int)pid);
+			error("Unable to find process with pid: %d\n", (int)pid);
 		}
     }
    	if(pid == -1) {
 		if(errno == EINTR) {
 			// Got interrupted by another signal
-			warn("Signal got interrupted\n");
-		} else {
+			warn("SIGCHLD handler got interrupted\n");
+		} else if(errno != ECHILD){
 			// Otherwise something bad happened so break out of loop
-			error("Wait pid returned -1: %s\n", strerror(errno));
+			error("Wait failed with error: %s\n", strerror(errno));
 		}
 	}
 }

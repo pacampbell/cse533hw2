@@ -50,7 +50,9 @@ bool remove_process(Process **processes, Process *process) {
 			} else {
 				// We are not at the head
 				node->prev->next = node->next;
-				node->next->prev = node->prev;
+				if(node->next != NULL) {
+					node->next->prev = node->prev;
+				}
 			}
 			free(node);
 			break;
