@@ -18,13 +18,23 @@ int main(int argc, char *argv[]) {
 			/* Setup some basic signals */
 			struct sigaction sigac_child;
 			struct sigaction sigac_alarm;
+			sigset_t child_handler_mask;
+			sigset_t alarm_handler_mask;
+
+			sigemptyset (&child_handler_mask);
+			sigemptyset (&alarm_handler_mask);
+			/* Block other terminal-generated signals while handler runs. */
+			sigaddset (&child_handler_mask, SIGALRM);
+			sigaddset (&alarm_handler_mask, SIGCHLD);
 			/* Zero out memory */
 			memset(&sigac_child, '\0', sizeof(sigac_child));
 			memset(&sigac_alarm, '\0', sizeof(sigac_alarm));
 			/* Set values */
 			sigac_child.sa_sigaction = &sigchld_handler;
+			sigac_child.sa_mask = child_handler_mask;
 			sigac_child.sa_flags = SA_SIGINFO;
 			sigac_alarm.sa_sigaction = &sigalrm_timeout;
+			sigac_alarm.sa_mask = alarm_handler_mask;
 			sigac_alarm.sa_flags = SA_SIGINFO;
 			/* Set the sigactions */
 			if(sigaction(SIGCHLD, &sigac_child, NULL) < 0) {
@@ -90,26 +100,18 @@ void run(Interface *interfaces, Config *config) {
 			if(FD_ISSET(node->sockfd, &rset)) {
 				struct stcp_pkt pkt;
 				debug("Detected connection on interface: <%s> %s\n", node->name, node->ip_address);
-				if(setjmp(env) != 0) {
-					warn("Interface <%s> %s timed out waiting to receive SYN.\n", node->name, node->ip_address);
-					node = node->next;
-					continue;
-				} else {
-					set_timeout(10);
-					valid_pkt = recvfrom_pkt(node->sockfd, &pkt, 0, (struct sockaddr *)&connection_addr, &connection_len);
-					if(valid_pkt < 0) {
-						if(errno == EAGAIN || errno == EWOULDBLOCK) {
-							/* False alarm, there was nothing to recv */
-							debug("Socket would have blocked. Skipping socket\n");
-							node = node->next;
-							continue;
-						} else {
-							error("Error on recvfrom: %s\n", strerror(errno));
-							node = node->next;
-							continue;
-						}
+				valid_pkt = recvfrom_pkt(node->sockfd, &pkt, 0, (struct sockaddr *)&connection_addr, &connection_len);
+				if(valid_pkt < 0) {
+					if(errno == EAGAIN || errno == EWOULDBLOCK) {
+						/* False alarm, there was nothing to recv */
+						debug("Socket would have blocked. Skipping socket\n");
+						node = node->next;
+						continue;
+					} else {
+						error("Error on recvfrom: %s\n", strerror(errno));
+						node = node->next;
+						continue;
 					}
-					clear_timeout();
 				}
 				if(server_valid_syn(valid_pkt, &pkt)) {
 					// Packet was valid
@@ -168,6 +170,15 @@ void run(Interface *interfaces, Config *config) {
 int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 	int pid;
 	Interface *interface = NULL;
+	sigset_t sigchld_mask;
+
+	sigemptyset(&sigchld_mask);
+	sigaddset(&sigchld_mask, SIGCHLD);
+	/* Block SIGCHLD unitl we add the child procces to the list */
+	if(sigprocmask(SIG_BLOCK, &sigchld_mask, NULL) < 0){
+		error("Error blocking SIGCHLD sigprocmask: %s\n", strerror(errno));
+	}
+
 	switch(pid = fork()) {
 		case -1:
 			/* Failed */
@@ -205,6 +216,10 @@ int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 			process->pid = pid;
 			info("Main Server - Child PID: %d\n", pid);
 			break;
+	}
+	/* Unblock SIGCHLD */
+	if(sigprocmask(SIG_UNBLOCK, &sigchld_mask, NULL) < 0){
+		error("Error unblocking SIGCHLD sigprocmask: %s\n", strerror(errno));
 	}
 	return pid;
 }
@@ -275,10 +290,10 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 					}
 				}
 				/* TODO: how to calculate correct timeout values ? */
-				set_timeout(10);
+				//set_timeout(10);
 				/* Wait for client's ACK */
 				len = recv_pkt(sock, &ack, 0);
-				clear_timeout();
+				//clear_timeout();
 			} while(!server_valid_ack(len, &ack) && handshake_attempts < MAX_HANDSHAKE_ATTEMPTS);
 			
 			// Check to make sure we didnt have too many handshake attempts
@@ -321,7 +336,7 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 			len = server_transmit_payload2(sock, pkt->hdr.seq + 1, 0, pkt, 
 				process, STCP_FIN, buffer, read);
 			// TODO: Receive the FIN_ACK from cleint
-			sleep(1);
+			recv_pkt(sock, &ack, 0);
 		} else {
 			error("Failed to create a socket.\n");
 		}
@@ -340,43 +355,37 @@ clean_up:
 static void sigchld_handler(int signum, siginfo_t *siginfo, void *context) {
     int pid;
     Process *process = NULL;
-    while(true) {
-    	pid = waitpid(-1, NULL, WNOHANG);
-    	if(pid == 0) {
-    		// No children have exited
-    		warn("No children have exited\n");
-    		break;
-    	} else if(pid == -1) {
-    		if(errno == EINTR) {
-    			// Got interrupted by another signal
-    			warn("Signal got interrupted\n");
-    			continue;
-    		}
-    		// Otherwise something bad happened so break out of loop
-    		error("Wait pid returned -1\n");
-    		break;
-    	} else {
-    		process = get_process_by_pid(processes, pid);
-	        if(process != NULL) {
-	        	if(remove_process(&processes, process)) {
-	        		error("Successfuly removed the process %d\n", (int)pid);
-	        	}
-	        } else {
-	        	warn("Unable to find process with pid: %d\n", (int)pid);
-	        }
-    	}
-    }
-}
 
-static void set_timeout(int nsec) {
-	if(alarm(nsec) != 0) {
-		warn("Alarm was already set with sec = %d\n", nsec);
+    while((pid = waitpid(-1, NULL, WNOHANG)) > 0) {
+		process = get_process_by_pid(processes, pid);
+		if(process != NULL) {
+			if(remove_process(&processes, process)) {
+				error("Successfuly removed the process %d\n", (int)pid);
+			}
+		} else {
+			warn("Unable to find process with pid: %d\n", (int)pid);
+		}
+    }
+   	if(pid == -1) {
+		if(errno == EINTR) {
+			// Got interrupted by another signal
+			warn("Signal got interrupted\n");
+		} else {
+			// Otherwise something bad happened so break out of loop
+			error("Wait pid returned -1: %s\n", strerror(errno));
+		}
 	}
 }
 
-static void clear_timeout() {
-	alarm(0);
-}
+// static void set_timeout(int nsec) {
+// 	if(alarm(nsec) != 0) {
+// 		warn("Alarm was already set with sec = %d\n", nsec);
+// 	}
+// }
+
+// static void clear_timeout() {
+// 	alarm(0);
+// }
 
 static void sigalrm_timeout(int signum, siginfo_t *siginfo, void *context) {
 	siglongjmp(env, 1);
