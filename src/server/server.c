@@ -225,7 +225,7 @@ int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 }
 
 void childprocess(Process *process, struct stcp_pkt *pkt) {
-	char file[1024];
+	char file[STCP_MAX_DATA + 1];
 	// Extract file name
 	strncpy(file, pkt->data, pkt->dlen);
 	file[pkt->dlen] = '\0';

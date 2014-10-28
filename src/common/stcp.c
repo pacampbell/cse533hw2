@@ -170,7 +170,8 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
 			/* Read response from server */
 			len = recv_pkt(sock->sockfd, &reply_pkt, 0);
 			if(len < 0) {
-				error("Receiving SYN+ACK packet: %s\n", strerror(errno));
+				error("Connection refused. No server at %s:%hu\n",
+						inet_ntoa(serv_addr->sin_addr), ntohs(serv_addr->sin_port));
 				return -1;
 			}
 			/* parse the new port from the server */
@@ -252,7 +253,7 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 	/* Attempt to receive packet */
 	len = recv_pkt(stcp->sockfd, &elem.pkt, 0);
 	if(len < 0) {
-		error("Server disconnected.\n");
+		error("Server disconnected during data transfer!\n");
 		done = -1;
 	} else if(len == 0) {
 		fprintf(stderr, "stcp_connect: recv_pkt failed to read any data\n");
@@ -270,7 +271,7 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 		if(added != NULL) {
 			/* init ACK packet */
 			if(added->pkt.hdr.flags & STCP_FIN) {
-				info("Producer buffered FIN, sending FIN ACK.\n");
+				info("Producer: buffered FIN, sending FIN ACK.\n");
 				flags |= STCP_FIN;
 				/* set done to 1 to indicate we sent the FIN ACK */
 				done = 1;
@@ -347,22 +348,21 @@ int stcp_client_read(struct stcp_sock *stcp, char *buf, int buflen, int *nread) 
 	}
 	if(*nread) {
 		info("Consumer: printing %d bytes of inorder data:\n", *nread);
+		/* Print out everything we copied into buf */
+		for(i = 0; i < *nread; ++i) {
+			putchar(buf[i]);
+		}
+		putchar('\n');
+		if(eof) {
+			info("Consumer: printed %d bytes of inorder data and read EOF. Ending...\n", *nread);
+		} else {
+			info("Consumer: printed %d bytes of inorder data.\n", *nread);
+		}
+	} else if(eof) {
+		/* We read the last packet and no other data */
+		info("Consumer: read EOF. Ending...\n");
 	} else {
 		debug("Consumer: No data to read from buffer.\n");
-	}
-	for(i = 0; i < *nread; ++i) {
-		/* Print out everything we copied into buf */
-		putchar(buf[i]);
-	}
-	if (eof) {
-		/* We read the last packet */
-		putchar('\n');
-		info("Consumer read EOF. Ending...\n");
-	} else {
-		if(*nread) {
-			putchar('\n');
-			info("Consumer printed %d bytes of inorder data.\n", *nread);
-		}
 	}
 	/* Release mutex */
 	if((err = pthread_mutex_unlock(&stcp->mutex)) != 0) {
