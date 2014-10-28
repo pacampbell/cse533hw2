@@ -299,7 +299,7 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 		/* Send ACK packet to server */
 		len = send_pkt(stcp->sockfd, &ack_pkt, 0);
 		if(len < 0) {
-			perror("stcp_connect: send_pkt");
+			error("Failed to send ACK handshake, send: %s", strerror(errno));
 			done = -1;
 		} else if(len == 0) {
 			error("send_pkt failed to write any data\n");
