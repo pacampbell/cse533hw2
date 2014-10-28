@@ -7,6 +7,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <fcntl.h>
 // system headers
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -87,5 +88,21 @@ int udpConnect(int sockfd, struct sockaddr_in *peer);
  * @return Returns the ipaddress as an unsigned int.
  */
 unsigned int convertIp(char *ipaddress);
+
+/*
+ * Sets a file descriptor to be non-blocking
+ *
+ * @param sockfd and valid socket file descriptor
+ * @return 0 on success, -1 on error
+ */
+int set_nonblocking(int sockfd);
+
+/*
+ * Sets a file descriptor to be blocking
+ *
+ * @param sockfd and valid socket file descriptor
+ * @return 0 on success, -1 on error
+ */
+int set_blocking(int sockfd);
 
 #endif

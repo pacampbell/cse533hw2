@@ -122,6 +122,11 @@ int createServer(char *address, unsigned int port) {
 		fd = SERVER_SOCKET_BIND_FAIL;
 		goto finished;
 	}
+	if(set_nonblocking(fd) < 0) {
+		error("Failed to set socket to non-blocking: %s:%d\n", address, port);
+		fd = SERVER_SOCKET_BIND_FAIL;
+		goto finished;
+	}
 finished:
 	return fd;
 }
@@ -206,4 +211,32 @@ unsigned int convertIp(char *ipaddress) {
 		address = ntohl(address);
 	}
 	return address;
+}
+
+int set_nonblocking(int sockfd) {
+    int fileflags;
+
+    if((fileflags = fcntl(sockfd, F_GETFL, 0)) == -1) {
+        perror("fcntl F_GETFL");
+        return -1;
+    }
+    if (fcntl(sockfd, F_SETFL, fileflags | O_NONBLOCK) == -1)  {
+        perror("fcntl F_SETFL, O_NONBLOCK");
+        return -1;
+    }
+    return 0;
+}
+
+int set_blocking(int sockfd) {
+    int fileflags;
+
+    if((fileflags = fcntl(sockfd, F_GETFL, 0)) == -1) {
+        perror("fcntl F_GETFL");
+        return -1;
+    }
+    if (fcntl(sockfd, F_SETFL, fileflags & ~O_NONBLOCK) == -1)  {
+        perror("fcntl F_SETFL, O_NONBLOCK");
+        return -1;
+    }
+    return 0;
 }

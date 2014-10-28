@@ -237,8 +237,9 @@ int stcp_connect(struct stcp_sock *sock, struct sockaddr_in *serv_addr, char *fi
  */
 int stcp_client_recv(struct stcp_sock *stcp) {
 	int len, err, done;
-	struct stcp_pkt data_pkt, ack_pkt;
+	struct stcp_pkt ack_pkt;
 	uint16_t flags;
+	Elem elem;
 
 	/* default return 0 (we are not done) */
 	done = 0;
@@ -249,7 +250,7 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 	}
 
 	/* Attempt to receive packet */
-	len = recv_pkt(stcp->sockfd, &data_pkt, 0);
+	len = recv_pkt(stcp->sockfd, &elem.pkt, 0);
 	if(len < 0) {
 		error("Server disconnected.\n");
 		done = -1;
@@ -257,34 +258,19 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 		fprintf(stderr, "stcp_connect: recv_pkt failed to read any data\n");
 		done = -1;
 	} else {
-		int seq_index;
-		/* Valid data packet */
-		info("data_pkt: ");
-		print_hdr(&data_pkt.hdr);
+		Elem *added;
+
+		/* TODO: Validate data packet? */
+		info("Received packet: ");
+		print_hdr(&elem.pkt.hdr);
 
 		/* Buffer and shit */
-		seq_index = data_pkt.hdr.seq - stcp->win.next_seq;
-		if(seq_index >=0 && seq_index < WIN_ADV(stcp->win)) {
-			/* It can fit in our buffer */
-			Elem *elem = &stcp->win.buf[(stcp->win.end + seq_index) % stcp->win.size];
-			if(elem->valid) {
-				debug("Window already contains this seq\n");
-			} else {
-				/* append into buffer */
-				debug("Appending pkt into window\n");
-				memcpy(&elem->pkt, &data_pkt, sizeof(data_pkt));
-				elem->valid = 1;
-				if(seq_index == 0){
-					debug("Advancing index of last elem in window\n");
-					stcp->win.end = (stcp->win.end + 1) % stcp->win.size;
-					stcp->win.count += 1;
-					stcp->win.next_seq += 1;
-				}
-			}
+		added = win_add_oor(&stcp->win, &elem);
+		flags = STCP_ACK;
+		if(added != NULL) {
 			/* init ACK packet */
-			flags = STCP_ACK;
-			if(data_pkt.hdr.flags & STCP_FIN) {
-				info("Producer received FIN, sending FIN ACK.\n");
+			if(added->pkt.hdr.flags & STCP_FIN) {
+				info("Producer buffered FIN, sending FIN ACK.\n");
 				flags |= STCP_FIN;
 				/* set done to 1 to indicate we sent the FIN ACK */
 				done = 1;
@@ -437,17 +423,22 @@ int win_empty(Window *win) {
 
 Elem *win_add(Window *win, Elem *elem) {
 	Elem *added = NULL;
-
-	if(win_full(win)) {
-		debug("Tried to add elem when the Window was full!\n");
+	if(win->next_seq == elem->pkt.hdr.seq) {
+		if(win_full(win)) {
+			debug("Tried to add elem when the Window was full!\n");
+		} else {
+			/* Copy the elem into the ending index and mark it as valid */
+			added = &win->buf[win->end];
+			memcpy(added, elem, sizeof(Elem));
+			elem->valid = 1;
+			/* Advance the end index and increment our elem count */
+			win->count += 1;
+			win->end = (win->end + 1) % win->size;
+			win->next_seq += 1;
+		}
 	} else {
-		/* Copy the elem into the ending index and mark it as valid */
-		added = &win->buf[win->end];
-		memcpy(added, elem, sizeof(Elem));
-		elem->valid = 1;
-		/* Advance the end index and increment our elem count */
-		win->count += 1;
-		win->end = (win->end + 1) % win->size;
+		error("You tried to add the wrong seq: %u! Expected:%u!",
+			elem->pkt.hdr.seq,win->next_seq);
 	}
 	return added;
 }
@@ -481,6 +472,53 @@ void win_clear(Window *win) {
 	while(!win_empty(win)) {
 		win_remove(win);
 	}
+}
+
+/**
+ * Functions only for receiver side
+ */
+
+Elem *win_add_oor(Window *win, Elem *elem) {
+	uint32_t seq = elem->pkt.hdr.seq;
+	uint32_t fwdoff; /* fwd offset of elem seq */
+	Elem *newelem = NULL;
+
+	if(seq < win->next_seq) {
+		fwdoff = win->next_seq - seq;
+	} else {
+		fwdoff = seq - win->next_seq;
+	}
+
+	/* see it we can fit this offset */
+	if(fwdoff == 0) {
+		/* we can just use regular add */
+		newelem = win_add(win, elem);
+	} else if(fwdoff < win_available(win)) {
+		Elem *newelem = win_get(win, fwdoff);
+		if(newelem->valid) {
+			debug("Recv window already buffered seq: %u\n", seq);
+		} else {
+			memcpy(newelem, elem, sizeof(Elem));
+			newelem->valid = 1;
+		}
+	} else {
+		/* no room in buffer */
+		debug("Recv window full. Dropping packet\n");
+	}
+
+	return newelem;
+}
+
+Elem *win_get(Window *win, int index) {
+	Elem *elem = NULL;
+	if(index > win->size) {
+		debug("Window index is too large.\n");
+	} else if (index < 0) {
+		debug("Window index cannot be negative.\n");
+	} else {
+		elem = &win->buf[index];
+	}
+	return elem;
 }
 
 /**

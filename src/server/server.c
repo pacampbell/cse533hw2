@@ -57,7 +57,12 @@ void run(Interface *interfaces, Config *config) {
 			node = node->next;
 		}
 		// Set on FD's
-		select(largest_fd + 1, &rset, NULL, NULL, NULL);
+		if(select(largest_fd + 1, &rset, NULL, NULL, NULL) < 0) {
+            if(errno != EINTR) {
+                error("Fatal Error on select: %s\n", strerror(errno));
+                break;
+            }
+        }
 		// Check to see if any are set
 		node = interfaces;
 		while(node != NULL) {
@@ -70,6 +75,18 @@ void run(Interface *interfaces, Config *config) {
 				} else {
 					set_timeout(10);
 					valid_pkt = recvfrom_pkt(node->sockfd, &pkt, 0, (struct sockaddr *)&connection_addr, &connection_len);
+					if(valid_pkt < 0) {
+						if(errno == EAGAIN || errno == EWOULDBLOCK) {
+							/* False alarm, there was nothing to recv */
+							debug("Socket would have blocked. Skipping socket\n");
+							node = node->next;
+							continue;
+						} else {
+							error("Error on recvfrom: %s\n", strerror(errno));
+							node = node->next;
+							continue;
+						}
+					}
 					clear_timeout();
 				}
 				if(server_valid_syn(valid_pkt, &pkt)) {
