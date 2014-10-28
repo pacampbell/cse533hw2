@@ -224,7 +224,7 @@ int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 }
 
 void childprocess(Process *process, struct stcp_pkt *pkt) {
-	char file[1024];
+	char file[STCP_MAX_DATA + 1];
 	// Extract file name
 	strncpy(file, pkt->data, pkt->dlen);
 	file[pkt->dlen] = '\0';
@@ -347,6 +347,7 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 			}
 
 			/* Connection established start sending file */
+			/* TODO: Must mask SIGALRM during read and make sure it is in the Window */
 			while((read = fread(buffer, sizeof(unsigned char), STCP_MAX_DATA, fp)) > 0) {
 				debug("Read %d bytes from the file '%s'\n", read, file);
 				// Transmit payload to server
@@ -364,6 +365,10 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 						read, (len - (int)sizeof(pkt->hdr)));
 					break;
 				}
+			}
+			if(ferror(fp)) {
+				error("Fatal error when reading from '%s': %s\n", file, strerror(ferror(fp)));
+				goto clean_up;
 			}
 			// Send the fin packet
 			len = server_transmit_payload2(sock, pkt->hdr.seq + 1, 0, pkt, 
@@ -472,7 +477,9 @@ int server_transmit_payload1(int socket, int seq, int ack, struct stcp_pkt *pkt,
 	#endif
 	// Send the packet and see what happens
 	bytes = sendto_pkt(socket, pkt, 0, (struct sockaddr*)&client, sizeof(client));
-	debug("Sent %d bytes to the client\n", bytes);
+	if(bytes >= 0) {
+		debug("Sent %d bytes to the client\n", bytes);
+	}
 	return bytes;
 }
 
@@ -487,6 +494,8 @@ int server_transmit_payload2(int socket, int seq, int ack, struct stcp_pkt *pkt,
 	#endif
 	// Send the packet and see what happens
 	bytes = send_pkt(socket, pkt, 0);
-	debug("Sent %d bytes to the client\n", bytes);
+	if(bytes >= 0) {
+		debug("Sent %d bytes to the client\n", bytes);
+	}
 	return bytes;
 }
