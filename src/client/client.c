@@ -138,6 +138,7 @@ bool chooseIPs(Config *config, struct in_addr *server_ip,
 	if(!local) {
 		unsigned long longest = 0; /* longest matching network mask in network order */
 		Interface *long_if = NULL;
+		struct in_addr subnet;
 		/* Set the IPserver to the config file */
 		server_ip->s_addr = config->serv_addr.s_addr;
 		info("IPserver set to config file value: %s\n", inet_ntoa(*server_ip));
@@ -151,8 +152,9 @@ bool chooseIPs(Config *config, struct in_addr *server_ip,
 			net_mask = mask_ip.s_addr;
 
 			if((ip_add & net_mask) == (server_ip->s_addr & net_mask)) {
+				subnet.s_addr = ip_add & net_mask;
 				/* Server IP and this interface IP are on the same subnet */
-				info("IPclient and IPserver share subnet IP: %s\n", temp->ip_address);
+				info("IPclient and IPserver share subnet IP: %s\n", inet_ntoa(subnet));
 				local = true;
 				if(ntohl(net_mask) > ntohl(longest)) {
 					longest = net_mask;
@@ -166,7 +168,8 @@ bool chooseIPs(Config *config, struct in_addr *server_ip,
 			client_ip->s_addr = htonl(INADDR_ANY);
 			info("No interfaces are local to IPserver, setting IPclient to arbitrary IP\n");
 		} else {
-			info("Chose longest prefix match with IPserver. IPclient: %s\n", long_if->ip_address);
+			info("Chose longest prefix match with Subnet: %s. IPclient: %s\n",
+				 inet_ntoa(subnet), long_if->ip_address);
 		}
 	}
 	info("Server address %s local!\n", local? "is":"is NOT");
