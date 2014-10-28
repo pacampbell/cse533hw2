@@ -2,36 +2,38 @@
 
 bool parseServerConfig(char *path, Config *config) {
 	bool success = false;
-	if(path != NULL && config != NULL) {
-		FILE *config_file = fopen(path, "r");
-		if(config_file != NULL) {
-			/* Atempt to read the file line by line */
-			char line[BUFFER_SIZE];
-			/* Read in the port value */
-			if(fgets(line, BUFFER_SIZE, config_file) != NULL) {
-				config->port = (unsigned short) atoi(line);
-			} else {
-				goto close;
-			}
-			/* Read in the window size */
-			if(fgets(line, BUFFER_SIZE, config_file) != NULL) {
-				config->win_size = (unsigned int) atoi(line);
-			} else {
-				goto close;
-			}
-			/* If we got this far must be a success */
+	int fd, rlen;
+	char file[2*BUFFER_SIZE];
+	if((fd = open(path, O_RDONLY)) < 0) {
+		error("Error opening config file: %s\n", strerror(errno));
+		return false;
+	}
+	/* read everything from the file */
+	if((rlen = read(fd, file, sizeof(file))) > 0) {
+		if(sscanf(file, "%hu\n%u", &config->port, &config->win_size) != 2) {
+			error("Config file: failed to parse both lines. Please verify format\n");
+			success = false;
+		} else {
+			/* Success!!!! */
 			success = true;
-close:
-			/* Close the file handle */
-			fclose(config_file);
 		}
+	} else if(rlen < 0) {
+		error("Error reading config file: %s\n", strerror(errno));
+		success = false;
+	} else {
+		error("Config file was empty!\n");
+		success = false;
+	}
+	if(close(fd) < 0) {
+		error("Error closing config file: %s\n", strerror(errno));
+		return false;
 	}
 	return success;
 }
 
 bool parseClientConfig(char *path, Config *config) {
 	bool success = false;
-	int fd, rlen;//, scanlen;
+	int fd, rlen;
 	char file[7 * 256];
 	if((fd = open(path, O_RDONLY)) < 0) {
 		error("Error opening config file: %s\n", strerror(errno));
@@ -40,7 +42,6 @@ bool parseClientConfig(char *path, Config *config) {
 	/* read everything from the file */
 	if((rlen = read(fd, file, sizeof(file))) > 0) {
 		char ipbuf[256];
-		/* HACKS: But I tested this with UNIX, DOS, Mac line endings */
 		if(sscanf(file, "%255s\n%hu\n%255s\n%u\n%d\n%lf\n%u",
 				ipbuf, &config->port, config->filename, &config->win_size,
 				&config->seed, &config->loss, &config->mean) != 7) {
@@ -60,7 +61,7 @@ bool parseClientConfig(char *path, Config *config) {
 		error("Error reading config file: %s\n", strerror(errno));
 		success = false;
 	} else {
-		error("!!!FILE WAS EMPTY!!!\n");
+		error("Config file was empty!\n");
 		success = false;
 	}
 	if(close(fd) < 0) {
