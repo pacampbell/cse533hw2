@@ -123,12 +123,13 @@ bool chooseIPs(Config *config, struct in_addr *server_ip,
 		destroy_interfaces(&interfaces);
 		exit(EXIT_FAILURE);
 	}
-	/* TODO: check if we match the server's address exactly */
+	/* Check if we match the server's address exactly */
 	for(temp = interfaces; temp != NULL; temp = temp->next) {
 		if(isSameIP(config->serv_addr, temp->ip_address)) {
 			local = true;
 			/* Set both IP's to 127.0.0.1 */
-			info("Client and server share the same IP: %s\n", temp->ip_address);
+			info("IPclient and IPserver share the same IP: %s\n", temp->ip_address);
+			info("Setting both IP's to be 127.0.0.1\n");
 			client_ip->s_addr = htonl(INADDR_LOOPBACK);
 			server_ip->s_addr = htonl(INADDR_LOOPBACK);
 			break;
@@ -136,7 +137,10 @@ bool chooseIPs(Config *config, struct in_addr *server_ip,
 	}
 	if(!local) {
 		unsigned long longest = 0; /* longest matching network mask in network order */
+		Interface *long_if = NULL;
+		/* Set the IPserver to the config file */
 		server_ip->s_addr = config->serv_addr.s_addr;
+		info("IPserver set to config file value: %s\n", inet_ntoa(*server_ip));
 		/* Chose longest prefix */
 		for(temp = interfaces; temp != NULL; temp = temp->next) {
 			struct in_addr temp_ip, mask_ip;
@@ -148,22 +152,24 @@ bool chooseIPs(Config *config, struct in_addr *server_ip,
 
 			if((ip_add & net_mask) == (server_ip->s_addr & net_mask)) {
 				/* Server IP and this interface IP are on the same subnet */
-				info("Client and server share subnet IP: %s\n", temp->ip_address);
+				info("IPclient and IPserver share subnet IP: %s\n", temp->ip_address);
 				local = true;
 				if(ntohl(net_mask) > ntohl(longest)) {
 					longest = net_mask;
+					long_if = temp;
 					client_ip->s_addr = ip_add;
 				}
 			}
 		}
 		if(!local) {
-			/* If NONE of the interfaces were local choose first IP */
-			inet_aton(interfaces->ip_address, client_ip);
+			/* If NONE of the interfaces were local to the server choose any address */
+			client_ip->s_addr = htonl(INADDR_ANY);
+			info("No interfaces are local to IPserver, setting IPclient to arbitrary IP\n");
+		} else {
+			info("Chose longest prefix match with IPserver. IPclient: %s\n", long_if->ip_address);
 		}
 	}
 	info("Server address %s local!\n", local? "is":"is NOT");
-	info("Server IP chosen to be: %s\n", inet_ntoa(*server_ip));
-	info("Client IP chosen to be: %s\n", inet_ntoa(*client_ip));
 
 	/* Clean up memory */
 	destroy_interfaces(&interfaces);
