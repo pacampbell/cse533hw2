@@ -190,8 +190,7 @@ int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 		case 0:
 			/* In child */
 			info("Server Child - PID: %d\n", (int)getpid());
-			// TODO: Close connection to other interfaces
-			// other FDs, etc.
+			/* Close unneeded parent FD */
 			interface = interfaces;
 			while(interface != NULL) {
 				if(interface->sockfd != process->interface_fd) {
@@ -263,41 +262,75 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 
 		if(sock >= 0) {
 			int len = 0;
-			int handshake_attempts = 0;
+			int timeout_duration = 1;
+			int timeout_attempts = 0;
+			fd_set handshake_set;
+			struct timeval tv;
+			int select_result;
+			bool valid_ack = false;
 			do {
-				// resend = false;
-				if(setjmp(env) != 0) {
-					// SYN_ACK HANDSHAKE TIMED OUT
-					handshake_attempts++;
-					warn("Handshake SYN_ACK timed out on attempt %d\n", handshake_attempts);
-					// TODO: Send on new and old
-					len = server_transmit_payload1(process->interface_fd, 0, 
-						pkt->hdr.seq + 1, pkt, process, STCP_SYN | STCP_ACK, 
-						&server_addr.sin_port, sizeof(server_addr.sin_port), 
-						client_addr);
-					len = server_transmit_payload2(sock, 0, 
-						pkt->hdr.seq + 1, pkt, process, STCP_SYN | STCP_ACK, 
-						&server_addr.sin_port, sizeof(server_addr.sin_port));
-				} else {
+				/* Wait for client's ACK */
+				FD_ZERO(&handshake_set);
+				FD_SET(sock, &handshake_set);
+
+				// determine which interfaces to send on
+				if(timeout_attempts == 0) {
 					// Send SYN | ACK for new socket
 					len = server_transmit_payload1(process->interface_fd, 0, 
 						pkt->hdr.seq + 1, pkt, process, STCP_SYN | STCP_ACK, 
 						&server_addr.sin_port, sizeof(server_addr.sin_port), 
 						client_addr);
-					// Log on the serer the error
+				} else {
+					// We had a timeout. Send on both server interface and new socket
+					len = server_transmit_payload1(process->interface_fd, 0, 
+						pkt->hdr.seq + 1, pkt, process, STCP_SYN | STCP_ACK, 
+						&server_addr.sin_port, sizeof(server_addr.sin_port), 
+						client_addr);
+					// TODO: Better error checking ?
 					if(len < 0) {
-						error("Failed to send packet to %s:%d\n", process->ip_address, process->port);
+						error("Failed to send SYN_ACK on interface server interface.\n");
+					}
+					len = server_transmit_payload2(sock, 0, 
+						pkt->hdr.seq + 1, pkt, process, STCP_SYN | STCP_ACK, 
+						&server_addr.sin_port, sizeof(server_addr.sin_port));
+					// TODO: Better error checking?
+					if(len < 0) {
+						error("Failed to send SYN_ACK on out of band udp socket.\n");
 					}
 				}
-				/* TODO: how to calculate correct timeout values ? */
-				//set_timeout(10);
-				/* Wait for client's ACK */
-				len = recv_pkt(sock, &ack, 0);
-				//clear_timeout();
-			} while(!server_valid_ack(len, &ack) && handshake_attempts < MAX_HANDSHAKE_ATTEMPTS);
+
+
+				// Calculate timeout
+				tv.tv_sec = timeout_duration;
+				tv.tv_usec = 0;
+				// Wait for FD to be set
+				select_result = select(sock + 1, &handshake_set, NULL, NULL, &tv);
+				if(select_result == 0) {
+					timeout_attempts++;
+					timeout_duration += timeout_duration;
+					warn("Socket timed out, Attempt: %d - Waiting %d seconds\n", timeout_attempts, timeout_duration);
+				} else if(select_result == -1) {
+					error("Select failed with error: %s\n", strerror(errno));
+				} else if (FD_ISSET(sock, &handshake_set)) {
+					len = recv_pkt(sock, &ack, 0);
+					valid_ack = server_valid_ack(len, &ack);
+					if(!valid_ack) {
+						timeout_attempts++;
+						timeout_duration += timeout_duration;
+						warn("Recevied packet on SYN_ACK but incorrect type. Attempt: %d - Waiting %d seconds\n", timeout_attempts, timeout_duration);
+					}
+				} else {
+					warn("An FD not in the handshake_set was set?\n");
+				}
+				// Break out of the loop and quit attempting to serve this client
+				if(timeout_attempts >= MAX_TIMEOUT_ATTEMPTS) {
+					error("Failed to initiate SYN_ACK handshake.\n");
+					goto clean_up;
+				}					
+			} while(!valid_ack && timeout_attempts < MAX_TIMEOUT_ATTEMPTS);
 			
 			// Check to make sure we didnt have too many handshake attempts
-			if(handshake_attempts >= MAX_HANDSHAKE_ATTEMPTS) {
+			if(timeout_attempts >= MAX_TIMEOUT_ATTEMPTS) {
 				error("Unable to complete three-way handshake on SYN_ACK step.\n");
 				goto clean_up;
 			}
