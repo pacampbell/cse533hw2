@@ -31,75 +31,43 @@ close:
 
 bool parseClientConfig(char *path, Config *config) {
 	bool success = false;
-	FILE *config_file;
-	if(path != NULL && config != NULL) {
-		config_file = fopen(path, "r");
-		if(config_file == NULL) {
-			error("Failed to open config file '%s' :%s\n", path, strerror(errno));
-			return false;
+	int fd, rlen;//, scanlen;
+	char file[7 * 256];
+	if((fd = open(path, O_RDONLY)) < 0) {
+		error("Error opening config file: %s\n", strerror(errno));
+		return false;
+	}
+	/* read everything from the file */
+	if((rlen = read(fd, file, sizeof(file))) > 0) {
+		char ipbuf[256];
+		/* HACKS: But I tested this with UNIX, DOS, Mac line endings */
+		if(sscanf(file, "%255s%*[ \r\n]%hu%*[ \r\n]%255s%*[ \r\n]%u%*[ \r\n]%d%*[ \r\n]%lf%*[ \r\n]%u",
+				ipbuf, &config->port, config->filename, &config->win_size,
+				&config->seed, &config->loss, &config->mean) != 7) {
+			error("Config file: failed to parse all 7 lines. Please verify format\n");
+			success = false;
 		} else {
-			/* Atempt to read the file line by line */
-			char line[BUFFER_SIZE];
-			/* Read in the server IP address value */
-			if(fgets(line, BUFFER_SIZE, config_file) != NULL) {
-				/* convert IP to a struct in_addr */
-				if(inet_aton(line, &config->serv_addr) == 0) {
-					error("Config file: failed to parse IP '%s'\n", line);
-					fclose(config_file);
-					return false;
-				}
+			/* convert IP to a struct in_addr */
+			if(inet_aton(ipbuf, &config->serv_addr) == 0) {
+				error("Config file: failed to parse IP '%s'\n", ipbuf);
+				success = false;
 			} else {
-				goto fgets_error;
+				/* Success!!!! */
+				success = true;
 			}
-			/* Read in the server port value */
-			if(fgets(line, BUFFER_SIZE, config_file) != NULL) {
-				config->port = (unsigned short) atoi(line);
-			} else {
-				goto fgets_error;
-			}
-			/* Read in the filename to be transferred */
-			if(fgets(config->filename, BUFFER_SIZE, config_file) != NULL) {
-				/* remove the new line */
-				int len = strlen(config->filename);
-				if(config->filename[len-1] == '\n')
-					config->filename[len-1] = '\0';
-			} else {
-				goto fgets_error;
-			}
-			/* Read in the window size */
-			if(fgets(line, BUFFER_SIZE, config_file) != NULL) {
-				config->win_size = (unsigned int) atoi(line);
-			} else {
-				goto fgets_error;
-			}
-			/* Read in the random seed value */
-			if(fgets(line, BUFFER_SIZE, config_file) != NULL) {
-				config->seed = (unsigned int) atoi(line);
-			} else {
-				goto fgets_error;
-			}
-			/* Read in the probability loss value */
-			if(fgets(line, BUFFER_SIZE, config_file) != NULL) {
-				config->loss = atof(line);
-			} else {
-				goto fgets_error;
-			}
-			/* Read in the mean of the exp. dist. value */
-			if(fgets(line, BUFFER_SIZE, config_file) != NULL) {
-				config->mean = (unsigned int) atoi(line);
-			} else {
-				goto fgets_error;
-			}
-			/* If we got this far must be a success */
-			success = true;
-			/* Close the file handle */
-			fclose(config_file);
 		}
+	} else if(rlen < 0) {
+		error("Error reading config file: %s\n", strerror(errno));
+		success = false;
+	} else {
+		error("!!!FILE WAS EMPTY!!!\n");
+		success = false;
+	}
+	if(close(fd) < 0) {
+		error("Error closing config file: %s\n", strerror(errno));
+		return false;
 	}
 	return success;
-fgets_error:
-	fclose(config_file);
-	return false;
 }
 
 int createServer(char *address, unsigned int port) {
@@ -169,32 +137,32 @@ int createClientSocket(struct sockaddr_in *serv_addr,
 			inet_ntoa(client_addr->sin_addr), ntohs(client_addr->sin_port));
 
 	/* connect the UDP socket to the server address */
-    if(udpConnect(sockfd, serv_addr) < 0) {
-        return -1;
-    }
+	if(udpConnect(sockfd, serv_addr) < 0) {
+		return -1;
+	}
 	/* return the successfully created/binded/connected socket */
 	return sockfd;
 }
 
 int udpConnect(int sockfd, struct sockaddr_in *peer) {
-    socklen_t len = sizeof(struct sockaddr_in);
+	socklen_t len = sizeof(struct sockaddr_in);
 
-    /* connect the UDP socket to the peer address */
-    if(connect(sockfd, (struct sockaddr*)peer,
-            sizeof(struct sockaddr_in)) < 0) {
-        perror("udpConnect: connect");
-        return -1;
-    }
-    /* Get the peername we connected to */
-    len = sizeof(struct sockaddr_in);
-    if(getpeername(sockfd, (struct sockaddr*)peer, &len) < 0) {
-        perror("udpConnect: getpeername");
-        return -1;
-    }
-    /* print the IP and port we connected to */
-    printf("UDP connected: peer\t IP %s port %hu\n",
-            inet_ntoa(peer->sin_addr), ntohs(peer->sin_port));
-    return 0;
+	/* connect the UDP socket to the peer address */
+	if(connect(sockfd, (struct sockaddr*)peer,
+			sizeof(struct sockaddr_in)) < 0) {
+		perror("udpConnect: connect");
+		return -1;
+	}
+	/* Get the peername we connected to */
+	len = sizeof(struct sockaddr_in);
+	if(getpeername(sockfd, (struct sockaddr*)peer, &len) < 0) {
+		perror("udpConnect: getpeername");
+		return -1;
+	}
+	/* print the IP and port we connected to */
+	printf("UDP connected: peer\t IP %s port %hu\n",
+			inet_ntoa(peer->sin_addr), ntohs(peer->sin_port));
+	return 0;
 }
 
 unsigned int convertIp(char *ipaddress) {
@@ -214,29 +182,29 @@ unsigned int convertIp(char *ipaddress) {
 }
 
 int set_nonblocking(int sockfd) {
-    int fileflags;
+	int fileflags;
 
-    if((fileflags = fcntl(sockfd, F_GETFL, 0)) == -1) {
-        perror("fcntl F_GETFL");
-        return -1;
-    }
-    if (fcntl(sockfd, F_SETFL, fileflags | O_NONBLOCK) == -1)  {
-        perror("fcntl F_SETFL, O_NONBLOCK");
-        return -1;
-    }
-    return 0;
+	if((fileflags = fcntl(sockfd, F_GETFL, 0)) == -1) {
+		perror("fcntl F_GETFL");
+		return -1;
+	}
+	if (fcntl(sockfd, F_SETFL, fileflags | O_NONBLOCK) == -1)  {
+		perror("fcntl F_SETFL, O_NONBLOCK");
+		return -1;
+	}
+	return 0;
 }
 
 int set_blocking(int sockfd) {
-    int fileflags;
+	int fileflags;
 
-    if((fileflags = fcntl(sockfd, F_GETFL, 0)) == -1) {
-        perror("fcntl F_GETFL");
-        return -1;
-    }
-    if (fcntl(sockfd, F_SETFL, fileflags & ~O_NONBLOCK) == -1)  {
-        perror("fcntl F_SETFL, O_NONBLOCK");
-        return -1;
-    }
-    return 0;
+	if((fileflags = fcntl(sockfd, F_GETFL, 0)) == -1) {
+		perror("fcntl F_GETFL");
+		return -1;
+	}
+	if (fcntl(sockfd, F_SETFL, fileflags & ~O_NONBLOCK) == -1)  {
+		perror("fcntl F_SETFL, O_NONBLOCK");
+		return -1;
+	}
+	return 0;
 }
