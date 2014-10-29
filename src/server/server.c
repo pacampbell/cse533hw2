@@ -519,9 +519,9 @@ static void sigchld_handler(int signum, siginfo_t *siginfo, void *context) {
 
 static void set_timeout(long int sec, long int usec) {
 	struct itimerval timer;
-	timer.it_value.tv_sec = 0;
-	timer.it_value.tv_usec = sec;
-	timer.it_interval.tv_sec = 0;
+	timer.it_value.tv_sec = sec;
+	timer.it_value.tv_usec = usec;
+	timer.it_interval.tv_sec = sec;
 	timer.it_interval.tv_usec = usec;
 	debug("Setting timeout for %ld seconds and %ld microseconds.\n", sec, usec);
 	setitimer(ITIMER_REAL, &timer, NULL);
