@@ -372,7 +372,7 @@ clean_up:
 
 int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 					uint32_t rwin_adv) {
-	int success = 0, i, bytes;
+	int success = 0, i, ret;
 	Window swin;
 	Elem *elem;
 	struct stcp_pkt ack;
@@ -400,7 +400,7 @@ send_payload:
 			/* send up to cwnd packets */
 			for(i = 0; swin.in_flight < swin.cwnd; i++, swin.in_flight++) {
 				elem = win_get_index(&swin, i);
-				if((bytes = send_pkt(sock, elem->pkt, 0)) == -1) {
+				if((ret = send_pkt(sock, &elem->pkt, 0)) == -1) {
 					warn("Failed to send packet to client: %s\n", strerror(errno));
 					// TODO: Resend packet?
 				}
@@ -411,11 +411,11 @@ send_payload:
 			do {
 				/* Keep checking under the alarm condition until
 				   we timeout or get a good ack. */
-				bytes = recv_pkt(sock, &ack, 0);
-				if(bytes < 1) {
+				ret = recv_pkt(sock, &ack, 0);
+				if(ret < 1) {
 					warn("Received a bad packet.\n");
 				}
-			} while(bytes == 0 || !win_valid_ack(&win, &ack));
+			} while(ret == 0 || !win_valid_ack(&swin, &ack));
 			clear_timeout();
 			/* Check to see if we are done? */
 			if(win_count(&swin) == 0 && eof) {
