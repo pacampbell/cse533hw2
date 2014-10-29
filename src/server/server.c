@@ -372,8 +372,12 @@ clean_up:
 
 int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 					uint32_t rwin_adv) {
-	int success = 0;
+	int success = 0, i, bytes;
 	Window swin;
+	Elem *elem;
+	struct stcp_pkt ack;
+	bool sending = true;
+	bool eof = false;
 	/* Get ourselves a sliding window buffer */
 	if(win_init(&swin, win_size, init_seq) < 0) {
 		error("Failed to initialize sliding window.\n");
@@ -394,21 +398,35 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 		if(sigsetjmp(env, 1) == 0) {
 send_payload:
 			/* send up to cwnd packets */
-			while(swin.in_flight < swin.cwnd) {
-				
+			for(i = 0; swin.in_flight < swin.cwnd; i++, swin.in_flight++) {
+				elem = win_get_index(&swin, i);
+				if((bytes = send_pkt(sock, elem->pkt, 0)) == -1) {
+					warn("Failed to send packet to client: %s\n", strerror(errno));
+					// TODO: Resend packet?
+				}
 			}
 			/* TODO: Make this timeout vary */
 			set_timeout(1000000);
 			/* receive packet */
+			do {
+				/* Keep checking under the alarm condition until
+				   we timeout or get a good ack. */
+				bytes = recv_pkt(sock, &ack, 0);
+				if(bytes < 1) {
+					warn("Received a bad packet.\n");
+				}
+			} while(bytes == 0 || !win_valid_ack(&win, &ack));
 			clear_timeout();
+			/* Check to see if we are done? */
+			if(win_count(&swin) == 0 && eof) {
+				sending = false;
+			}
+
 		} else {
 			/* Handle timeout stuff here*/
 			goto send_payload;
 		}
-
-
-
-	} while(true);
+	} while(sending);
 
 clean_up:
 	clear_timeout();
