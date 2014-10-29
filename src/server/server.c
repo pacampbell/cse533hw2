@@ -45,6 +45,8 @@ int main(int argc, char *argv[]) {
 				error("Unable to set SIGALRM sigaction.\n");
 				goto clean_up;
 			}
+			/* Set the alarm timer */
+			
 			/* Start the servers main loop */
 			run(interfaces, &config);
 		} else {
@@ -361,13 +363,18 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 //TODO: Fix server_transmit_payload can fail with negative len
 //DEBUG: src/server/server.c:server_transmit_payload:352 Sent -1 bytes to the client
 //ERROR: src/server/server.c:childprocess:248 Read len = 9, Sent len = -13 (they should match)
+				set_timeout(10000);
+
+				// sigsetjmp(mark,0) != 0
 
 				if(nread != (len - sizeof(pkt->hdr))) {
 					error("Read len = %d, Sent len = %d (they should match)\n",
 						nread, (len - (int)sizeof(pkt->hdr)));
 					break;
 				}
+				clear_timeout();
 			}
+
 			if(nread < 0) {
 				error("Fatal error when reading from '%s': %s\n", file, strerror(errno));
 				goto clean_up;
@@ -418,15 +425,23 @@ static void sigchld_handler(int signum, siginfo_t *siginfo, void *context) {
 	}
 }
 
-// static void set_timeout(int nsec) {
-// 	if(alarm(nsec) != 0) {
-// 		warn("Alarm was already set with sec = %d\n", nsec);
-// 	}
-// }
+static void set_timeout(int nsec) {
+ 	struct itimerval timer;
+	timer.it_value.tv_sec = 0;
+	timer.it_value.tv_usec = nsec;
+	timer.it_interval.tv_sec = 0;
+	timer.it_interval.tv_usec = nsec;
+	setitimer(ITIMER_REAL, &timer, NULL);
+}
 
-// static void clear_timeout() {
-// 	alarm(0);
-// }
+static void clear_timeout() {
+	struct itimerval timer;
+	timer.it_value.tv_sec = 0;
+	timer.it_value.tv_usec = 0;
+	timer.it_interval.tv_sec = 0;
+	timer.it_interval.tv_usec = 0;
+	setitimer(ITIMER_REAL, &timer, NULL);
+}
 
 static void sigalrm_timeout(int signum, siginfo_t *siginfo, void *context) {
 	siglongjmp(env, 1);
