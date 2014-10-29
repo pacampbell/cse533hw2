@@ -382,9 +382,36 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 	/* Set the initial Advertised window of the client */
 	swin.rwin_adv = rwin_adv;
 	/* Commence file transfer */
-	set_timeout(999999999);
-	clear_timeout();
+	do {
+		while(win_send_limit(&swin)) {
+			// TODO: Check case when cwin < count
+			if(!win_buffer_elem(&swin, fd)) {
+				/* critical error */
+				goto clean_up;
+			}
+		}
+		/* Set the longjump marker here */
+		if(sigsetjmp(env, 1) == 0) {
+send_payload:
+			/* send up to cwnd packets */
+			while(swin.in_flight < swin.cwnd) {
+				
+			}
+			/* TODO: Make this timeout vary */
+			set_timeout(1000000);
+			/* receive packet */
+			clear_timeout();
+		} else {
+			/* Handle timeout stuff here*/
+			/* goto send */
+		}
 
+
+
+	} while(true);
+
+clean_up:
+	clear_timeout();
 	win_destroy(&swin);
 	return success;
 }
