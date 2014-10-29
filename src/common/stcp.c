@@ -666,6 +666,7 @@ int win_send_limit(Window *win) {
 	}
 }
 
+/* TODO: what if called twice at EOF? */
 int win_buffer_elem(Window *win, int fd) {
 	int rlen;
 	char buffer[STCP_MAX_DATA];
@@ -677,17 +678,44 @@ int win_buffer_elem(Window *win, int fd) {
 		debug("Read %d bytes. Built data Element.\n", rlen);
 	} else if(rlen == 0) {
 		/* Read the end of the file, build the FIN packet */
-		build_pkt(&newelem.pkt, win->next_seq, 0, 0, STCP_FIN, buffer, rlen);
+		build_pkt(&newelem.pkt, win->next_seq, 0, 0, STCP_FIN, NULL, 0);
 		debug("Read EOF. Built FIN Element.\n");
 	} else {
 		/* Error */
 		error("Fatal error when reading from file: %s\n", strerror(errno));
-		return 0;
+		return -1;
 	}
 	/* now that we built the Elem, add it to the window */
 	if(win_add(win, &newelem) == NULL) {
 		error("Fatal error: Tried to buffer data but window was full\n");
-		return 0;
+		return -1;
 	}
-	return 1;
+	return rlen;
+}
+
+Elem *win_get_index(Window *win, int startoff) {
+	Elem *elem = NULL;
+	if(startoff > win->size) {
+		warn("Window startoff %d is too large.\n", startoff);
+	} else if(startoff < 0) {
+		warn("Window startoff %d cannot be negative.\n", startoff);
+	} else if(startoff >= win->count) {
+		warn("Window startoff %d cannot be greater than window count %d.\n", startoff, win->count);
+	} else {
+		elem = &win->buf[(win->start + startoff) % win->size];
+	}
+	return elem;
+}
+
+int win_valid_ACK(Window *win, struct stcp_pkt *pkt) {
+	int valid = 0;
+
+	if(pkt != NULL) {
+		if((pkt->hdr.flags & STCP_ACK)
+			&& (pkt->hdr.ack >= win->next_ack)
+			&& (pkt->hdr.ack <= (win->next_ack + win->count))) {
+			valid = 1;
+		}
+	}
+	return valid;
 }

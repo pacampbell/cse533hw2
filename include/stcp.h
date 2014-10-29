@@ -284,10 +284,10 @@ Elem *win_add_oor(Window *win, Elem *elem);
 /**
  * Returns the elem at offset fwdoff. Or NULL if the index is too large.
  * @param win  The Window
- * @param fwdoff The forward offset from end of the Element to return.
+ * @param endoff The forward offset from end of the Element to return.
  * @return pointer to the oldest elem, or NULL if the index is too large.
  */
-Elem *win_get(Window *win, int fwdoff);
+Elem *win_get(Window *win, int endoff);
 
 /**
  * Functions only for sender side
@@ -308,5 +308,15 @@ int win_send_limit(Window *win);
  * @return  True if the buffering was succesful, or false on error.
  */
 int win_buffer_elem(Window *win, int fd);
+
+
+/**
+ * Returns the elem at offset startoff from the start of the window. Or NULL
+ * if the offset is too large.
+ * @param win  The Window
+ * @param startoff The forward offset from start of the Element to return.
+ * @return pointer to the oldest elem, or NULL if the index is too large.
+ */
+Elem *win_get_index(Window *win, int startoff);
 
 #endif
