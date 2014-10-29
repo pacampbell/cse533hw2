@@ -329,15 +329,15 @@ Elem *win_get_index(Window *win, int startoff);
  * @param pkt  The pkt in question
  * @return True if valid, False if invalid
  */
-int win_valid_ACK(Window *win, struct stcp_pkt *pkt);
+int win_valid_ack(Window *win, struct stcp_pkt *pkt);
 
 /*
  * Removes all Element in the window whose seq# is < ack.
  *
  * @param win  The sending window
- * @param ack  The valid ack num to remove
+ * @param pkt  The pkt which is a valid ACK packet
  * @return The count of Elements removes
  */
-int win_remove_ack(Window *win, uint32_t ack);
+int win_remove_ack(Window *win,  struct stcp_pkt *pkt);
 
 #endif

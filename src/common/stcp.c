@@ -571,6 +571,9 @@ void win_remove(Window *win) {
 		/* Advance the start index and decrement count */
 		win->count -= 1;
 		win->start = (win->start + 1) % win->size;
+
+		/* Update win->next_ack */
+		win->next_ack += 1;
 	}
 }
 
@@ -719,43 +722,47 @@ Elem *win_get_index(Window *win, int startoff) {
 	return elem;
 }
 
-int win_valid_ACK(Window *win, struct stcp_pkt *pkt) {
+int win_valid_ack(Window *win, struct stcp_pkt *pkt) {
 	int valid = 0;
-/** TODO get index of elem with seq == ACK */
-/* Then remove all elements less than that */
 	if(pkt != NULL) {
-		if((pkt->hdr.flags & STCP_ACK)
-			&& (pkt->hdr.ack >= win->next_ack)
-			&& (pkt->hdr.ack <= (win->next_ack + win->count))) {
-			valid = 1;
-			/* update the last seen size of the clients buffer */
-			win->rwin_adv = pkt->hdr.win;
-		} else if(pkt->hdr.flags & STCP_FIN) {
+		if(pkt->hdr.flags & STCP_ACK && !win_empty(win)) {
+			uint32_t ack = pkt->hdr.ack;
+			/* If Most outstanding SEQ number is less than ending SEQ number */
+			if(win->next_ack < win->next_seq) {
+				valid = ack >= win->next_ack && ack <= win->next_seq;
+			} else {
+				valid = ack >= win->next_ack || ack <= win->next_seq;
+			}
+		}
+		/* TODO: should hanlding FIN ACK be put here? */
+		if(pkt->hdr.flags & STCP_FIN) {
 			valid = 1;
 		}
 	}
 	return valid;
 }
 
-int win_remove_ack(Window *win, uint32_t ack) {
-	int count = 0;
+int win_remove_ack(Window *win,  struct stcp_pkt *ack_pkt) {
+	int removed = 0;
+	uint32_t ack = ack_pkt->hdr.ack;
+	/* update the last seen size of the clients buffer */
+	win->rwin_adv = ack_pkt->hdr.win;
 	if(win_empty(win)) {
 		warn("Window: tried to ack but window was empty\n");
 	} else {
-/** TODO get index of elem with seq == ACK */
-/* Then remove all elements less than that */
 		Elem *elem = win_oldest(win);
-		while(elem != NULL && (elem->pkt.hdr.seq < ack)) {
+		/* Remove until ACK == Elem seq# */
+		while(elem->pkt.hdr.seq != ack) {
 			if(!elem->valid) {
 				warn("Elem is invalid but is treated as buffered\n");
 			}
 			win_remove(win);
-			++count;
-			if(win_empty(win)) {
+			++removed;
+			/* Increase to next elem */
+			if(win_empty(win))
 				break;
-			}
 			elem = win_oldest(win);
 		}
 	}
-	return count;
+	return removed;
 }
