@@ -387,11 +387,15 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 	swin.rwin_adv = rwin_adv;
 	/* Commence file transfer */
 	do {
-		while(win_send_limit(&swin)) {
+		while(!eof && win_send_limit(&swin)) {
 			// TODO: Check case when cwin < count
-			if(!win_buffer_elem(&swin, fd)) {
+			if((ret = win_buffer_elem(&swin, fd)) == -1) {
 				/* critical error */
 				goto clean_up;
+			} else if(ret == 0) {
+				eof = true;
+			} else {
+				debug("Buffered packet succesfully.\n");
 			}
 		}
 		/* Set the longjump marker here */
@@ -415,11 +419,22 @@ send_payload:
 				if(ret < 1) {
 					warn("Received a bad packet.\n");
 				}
-			} while(ret == 0 || !win_valid_ack(&swin, &ack));
+			} while(ret == 0 || !win_valid_ACK(&swin, &ack));
 			clear_timeout();
+
+			/* Decrement inflight packet count since ack was valid */
+			swin.in_flight -= win_remove_ack(&win, ack.hdr.ack);
+
+			/* Check to make sure we didnt do something stupid */
+			if(swin.in_flight < 0) {
+				error("Negative window.in_flight value.\n");
+				goto clean_up;
+			}
+
 			/* Check to see if we are done? */
 			if(win_count(&swin) == 0 && eof) {
 				sending = false;
+				success = true;
 			}
 
 		} else {
