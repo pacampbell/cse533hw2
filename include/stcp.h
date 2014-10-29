@@ -19,6 +19,7 @@
 #define STCP_MAX_SEG 512
 #define STCP_HDR_SIZE 12
 #define STCP_MAX_DATA 500
+#define STCP_FAST_RETRANSMIT 3
 
 /* STCP structs */
 /* Header */
@@ -67,6 +68,7 @@ typedef struct {
 	uint16_t rwin_adv;	/* Last seen window size from a reciever ACK */
 	uint16_t cwnd;		/* Congestion window value */
 	uint16_t ssthresh;	/* Slow Start Threshhold */
+	int dup_ack;		/* Duplicate ACK count for fast retransmit */
 	// TODO: other shit for sending
 } Window;
 
@@ -323,7 +325,8 @@ Elem *win_get_index(Window *win, int startoff);
 
 /*
  * Returns true if the packet pointed to by pkt is a valid ACK for the current
- * state of sending window win.
+ * state of sending window win. Duplicate ACK packets are valid and should
+ * return True.
  *
  * @param win  The sending window
  * @param pkt  The pkt in question
@@ -332,12 +335,22 @@ Elem *win_get_index(Window *win, int startoff);
 int win_valid_ack(Window *win, struct stcp_pkt *pkt);
 
 /*
+ * Returns true if the packet pointed to by pkt is a a duplicate ACk.
+ * And updates the duplicate ACK count in the Window
+ *
+ * @param win  The sending window
+ * @param pkt  The pkt that was validated by win_valid_ack
+ * @return True if duplicate, False if not
+ */
+int win_dup_ack(Window *win,  struct stcp_pkt *pkt);
+
+/*
  * Removes all Element in the window whose seq# is < ack.
  *
  * @param win  The sending window
- * @param pkt  The pkt which is a valid ACK packet
+ * @param ack_pkt  The pkt which is a valid ACK packet
  * @return The count of Elements removes
  */
-int win_remove_ack(Window *win,  struct stcp_pkt *pkt);
+int win_remove_ack(Window *win,  struct stcp_pkt *ack_pkt);
 
 #endif

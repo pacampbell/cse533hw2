@@ -574,6 +574,8 @@ void win_remove(Window *win) {
 
 		/* Update win->next_ack */
 		win->next_ack += 1;
+		/* Reset the duplicate ACK count */
+		win->dup_ack = 0;
 	}
 }
 
@@ -740,6 +742,19 @@ int win_valid_ack(Window *win, struct stcp_pkt *pkt) {
 		}
 	}
 	return valid;
+}
+
+int win_dup_ack(Window *win,  struct stcp_pkt *pkt) {
+	int dup = 0;
+	if(pkt != NULL) {
+		if(!win_empty(win)) {
+			Elem *oldest = win_oldest(win);
+			/* Check if the oldest element SEQ# equals this ACK */
+			dup = oldest->pkt.hdr.seq == pkt->hdr.ack;
+			++win->dup_ack;
+		}
+	}
+	return dup;
 }
 
 int win_remove_ack(Window *win,  struct stcp_pkt *ack_pkt) {

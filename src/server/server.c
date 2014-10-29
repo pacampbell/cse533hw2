@@ -432,13 +432,18 @@ send_payload:
 			set_timeout(5, 0);
 			/* receive packet */
 			do {
+				if(swin.dup_ack == STCP_FAST_RETRANSMIT) {
+					/* Do Fast Restransmit */
+					warn("Fast Restransmit not implemented!\n");
+				}
 				/* Keep checking under the alarm condition until
 				   we timeout or get a good ack. */
 				ret = recv_pkt(sock, &ack, 0);
+				/* what if we get SIGALRM here????? */
 				if(ret < 1) {
 					warn("Received a bad packet.\n");
 				}
-			} while(ret == 0 || !win_valid_ack(&swin, &ack));
+			} while(ret == 0 || !win_valid_ack(&swin, &ack) || win_dup_ack(&swin, &ack));
 			clear_timeout();
 
 			/* Decrement inflight packet count since ack was valid */
