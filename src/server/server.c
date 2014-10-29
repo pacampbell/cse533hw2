@@ -45,6 +45,8 @@ int main(int argc, char *argv[]) {
 				error("Unable to set SIGALRM sigaction.\n");
 				goto clean_up;
 			}
+			/* Set the alarm timer */
+			
 			/* Start the servers main loop */
 			run(interfaces, &config);
 		} else {
@@ -380,7 +382,8 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 	/* Set the initial Advertised window of the client */
 	swin.rwin_adv = rwin_adv;
 	/* Commence file transfer */
-
+	set_timeout(999999999);
+	clear_timeout();
 
 	win_destroy(&swin);
 	return success;
@@ -411,15 +414,23 @@ static void sigchld_handler(int signum, siginfo_t *siginfo, void *context) {
 	}
 }
 
-// static void set_timeout(int nsec) {
-// 	if(alarm(nsec) != 0) {
-// 		warn("Alarm was already set with sec = %d\n", nsec);
-// 	}
-// }
+static void set_timeout(int usec) {
+ 	struct itimerval timer;
+	timer.it_value.tv_sec = 0;
+	timer.it_value.tv_usec = usec;
+	timer.it_interval.tv_sec = 0;
+	timer.it_interval.tv_usec = usec;
+	setitimer(ITIMER_REAL, &timer, NULL);
+}
 
-// static void clear_timeout() {
-// 	alarm(0);
-// }
+static void clear_timeout() {
+	struct itimerval timer;
+	timer.it_value.tv_sec = 0;
+	timer.it_value.tv_usec = 0;
+	timer.it_interval.tv_sec = 0;
+	timer.it_interval.tv_usec = 0;
+	setitimer(ITIMER_REAL, &timer, NULL);
+}
 
 static void sigalrm_timeout(int signum, siginfo_t *siginfo, void *context) {
 	siglongjmp(env, 1);

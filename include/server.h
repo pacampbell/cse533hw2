@@ -68,13 +68,13 @@ static void sigalrm_timeout(int signum, siginfo_t *siginfo, void *context);
 /**
  * Sets the timeout for sigalrm.
  */
-//static void set_timeout();
+static void set_timeout(int usec);
 
 /**
  * Clears the alarm timer and sets back
  * the original alarm function.
  */ 
-//static void clear_timeout();
+static void clear_timeout(void);
 
 /* Packet helper functions */
 
