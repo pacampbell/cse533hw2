@@ -414,11 +414,11 @@ send_payload:
 				if(ret < 1) {
 					warn("Received a bad packet.\n");
 				}
-			} while(ret == 0 || !win_valid_ACK(&swin, &ack));
+			} while(ret == 0 || !win_valid_ack(&swin, &ack));
 			clear_timeout();
 
 			/* Decrement inflight packet count since ack was valid */
-			ret = win_remove_ack(&swin, ack.hdr.ack);
+			ret = win_remove_ack(&swin, &ack);
 			swin.in_flight -= ret;
 			/* Update cwnd */
 			if(swin.cwnd + ret < swin.ssthresh) {
