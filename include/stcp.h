@@ -282,11 +282,12 @@ void win_clear(Window *win);
 Elem *win_add_oor(Window *win, Elem *elem);
 
 /**
- * Returns the elem at offset index. Or NULL if the index is too large.
+ * Returns the elem at offset fwdoff. Or NULL if the index is too large.
  * @param win  The Window
+ * @param fwdoff The forward offset from end of the Element to return.
  * @return pointer to the oldest elem, or NULL if the index is too large.
  */
-Elem *win_get(Window *win, int index);
+Elem *win_get(Window *win, int fwdoff);
 
 /**
  * Functions only for sender side
