@@ -401,6 +401,10 @@ void client_set_loss(unsigned int seed, double loss) {
 int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 		struct sockaddr *dest_addr, socklen_t addrlen) {
 	int rv;
+#ifdef DEBUG
+	debug("Sending pkt: ");
+	print_hdr(&pkt->hdr);
+#endif
 	/* DROP */
 	if(rand() < loss_thresh) {
 		warn("Artificially dropped on sendto ");
@@ -418,6 +422,10 @@ int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 
 int send_pkt(int sockfd, struct stcp_pkt *pkt, int flags) {
 	int rv;
+#ifdef DEBUG
+	debug("Sending pkt: ");
+	print_hdr(&pkt->hdr);
+#endif
 	/* DROP */
 	if(rand() < loss_thresh) {
 		warn("Artificially dropped on send ");
@@ -454,6 +462,10 @@ int recvfrom_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 			/* might be valid */
 			rv = valid_pkt(pkt);
 		}
+#ifdef DEBUG
+		debug("Received pkt: ");
+		print_hdr(&pkt->hdr);
+#endif
 	}
 	return rv;
 }
@@ -479,6 +491,10 @@ int recv_pkt(int sockfd, struct stcp_pkt *pkt, int flags) {
 			/* might be valid */
 			rv = valid_pkt(pkt);
 		}
+#ifdef DEBUG
+		debug("Received pkt: ");
+		print_hdr(&pkt->hdr);
+#endif
 	}
 	return rv;
 }
