@@ -719,3 +719,18 @@ int win_valid_ACK(Window *win, struct stcp_pkt *pkt) {
 	}
 	return valid;
 }
+
+int win_remove_ack(Window *win, uint32_t ack) {
+	int count = 0;
+	if(win_empty(win)) {
+		warn("Window: tried to ack but window was empty\n");
+	} else {
+		Elem *elem = win_oldest(win);
+		while(elem != NULL && (elem->pkt.hdr.seq < ack)) {
+			win_remove(win);
+			++count;
+			elem = win_oldest(win);
+		}
+	}
+	return count;
+}
