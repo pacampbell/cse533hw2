@@ -490,6 +490,10 @@ int win_init(Window *win, int win_size, uint32_t initial_seq) {
 	/* sliding window size */
 	win->size = win_size;
 	win->next_seq = initial_seq;
+	win->next_ack = initial_seq;
+	/* Slow Start values */
+	win->cwin = 1;
+	win->ssthresh = 65535; /* Max value initially */
 	/* Allocate space for the receiving window */
 	win->buf = calloc(win_size, sizeof(Elem));
 	if(win->buf == NULL) {
@@ -539,7 +543,7 @@ Elem *win_add(Window *win, Elem *elem) {
 		}
 	} else {
 		error("You tried to add the wrong seq: %u! Expected:%u!",
-			elem->pkt.hdr.seq,win->next_seq);
+			elem->pkt.hdr.seq, win->next_seq);
 	}
 	return added;
 }
@@ -659,4 +663,30 @@ int win_send_limit(Window *win) {
 	} else {
 		return (avail < win->rwin_adv)? avail : win->rwin_adv;
 	}
+}
+
+int win_buffer_elem(Window *win, int fd) {
+	int rlen;
+	char buffer[STCP_MAX_DATA];
+	Elem newelem;
+	/* read data from file */
+	if((rlen = read(fd, buffer, sizeof(buffer))) > 0) {
+		/* build the elem to go in the window */
+		build_pkt(&newelem.pkt, win->next_seq, 0, 0, 0, buffer, rlen);
+		debug("Read %d bytes. Built data Element.\n", rlen);
+	} else if(rlen == 0) {
+		/* Read the end of the file, build the FIN packet */
+		build_pkt(&newelem.pkt, win->next_seq, 0, 0, STCP_FIN, buffer, rlen);
+		debug("Read EOF. Built FIN Element.\n");
+	} else {
+		/* Error */
+		error("Fatal error when reading from file: %s\n", strerror(errno));
+		return 0;
+	}
+	/* now that we built the Elem, add it to the window */
+	if(win_add(win, &newelem) == NULL) {
+		error("Fatal error: Tried to buffer data but window was full\n");
+		return 0;
+	}
+	return 1;
 }

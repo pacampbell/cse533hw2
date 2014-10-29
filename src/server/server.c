@@ -225,44 +225,42 @@ int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 
 void childprocess(Process *process, struct stcp_pkt *pkt) {
 	char file[STCP_MAX_DATA + 1];
+	int fd;
 	// Extract file name
 	strncpy(file, pkt->data, pkt->dlen);
 	file[pkt->dlen] = '\0';
 	info("Searching for file: '%s'\n", file);
 	// Attempt to open the file
-	FILE *fp = fopen(file, "r");
-	int fd;
-	if(fp != NULL) {
-		int sock = -1;
-		int nread = 0;
-		bool samesub = false;
+	fd = open(file, O_RDONLY);
+	if(fd >= 0) {
+		int sock;
+		bool samesub;
 		struct stcp_pkt ack;
 		struct sockaddr_in client_addr, server_addr;
-		char buffer[STCP_MAX_DATA];
-		
+
 		// Zero out memory
 		memset((char *)&client_addr, 0, sizeof(client_addr));
 		memset((char *)&server_addr, 0, sizeof(server_addr));
-		
 		// Set client fields
 		client_addr.sin_family = AF_INET;
 		client_addr.sin_port = process->port;
 		inet_aton(process->ip_address, &client_addr.sin_addr);
-		
 		// Set server fields
 		server_addr.sin_family = AF_INET;
 		server_addr.sin_port = htons(0);
 		inet_aton(process->interface_ip_address, &server_addr.sin_addr);
 
 		// Attach socket depending on if local or not
-		samesub = isSameSubnet(process->interface_ip_address, 
-							   process->ip_address, 
+		samesub = isSameSubnet(process->interface_ip_address,
+							   process->ip_address,
 							   process->interface_network_mask);
 		// Create socketfd
 		sock = createClientSocket(&client_addr, &server_addr, samesub);
 
 		if(sock >= 0) {
 			int len = 0;
+			uint32_t init_seq = 0;			/* This is the seq sent on the FIN ACK */
+			uint32_t rwin_adv = 0;			/* This is the win_size received on the ACK */
 			int timeout_duration = 1;
 			int timeout_attempts = 0;
 			fd_set handshake_set;
@@ -277,22 +275,22 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 				// determine which interfaces to send on
 				if(timeout_attempts == 0) {
 					// Send SYN | ACK for new socket
-					len = server_transmit_payload1(process->interface_fd, 0, 
-						pkt->hdr.seq + 1, pkt, process, STCP_SYN | STCP_ACK, 
-						&server_addr.sin_port, sizeof(server_addr.sin_port), 
+					len = server_transmit_payload1(process->interface_fd, init_seq,
+						pkt->hdr.seq + 1, pkt, process, STCP_SYN | STCP_ACK,
+						&server_addr.sin_port, sizeof(server_addr.sin_port),
 						client_addr);
 				} else {
 					// We had a timeout. Send on both server interface and new socket
-					len = server_transmit_payload1(process->interface_fd, 0, 
-						pkt->hdr.seq + 1, pkt, process, STCP_SYN | STCP_ACK, 
-						&server_addr.sin_port, sizeof(server_addr.sin_port), 
+					len = server_transmit_payload1(process->interface_fd, init_seq,
+						pkt->hdr.seq + 1, pkt, process, STCP_SYN | STCP_ACK,
+						&server_addr.sin_port, sizeof(server_addr.sin_port),
 						client_addr);
 					// TODO: Better error checking ?
 					if(len < 0) {
 						error("Failed to send SYN_ACK on interface server interface.\n");
 					}
-					len = server_transmit_payload2(sock, 0, 
-						pkt->hdr.seq + 1, pkt, process, STCP_SYN | STCP_ACK, 
+					len = server_transmit_payload2(sock, init_seq,
+						pkt->hdr.seq + 1, pkt, process, STCP_SYN | STCP_ACK,
 						&server_addr.sin_port, sizeof(server_addr.sin_port));
 					// TODO: Better error checking?
 					if(len < 0) {
@@ -319,6 +317,9 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 						timeout_attempts++;
 						timeout_duration += timeout_duration;
 						warn("Recevied packet on SYN_ACK but incorrect type. Attempt: %d - Waiting %d seconds\n", timeout_attempts, timeout_duration);
+					} else {
+						/* The advertised window size of the client */
+						rwin_adv = ack.hdr.win;
 					}
 				} else {
 					warn("An FD not in the handshake_set was set?\n");
@@ -327,9 +328,9 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 				if(timeout_attempts >= MAX_TIMEOUT_ATTEMPTS) {
 					error("Failed to initiate SYN_ACK handshake.\n");
 					goto clean_up;
-				}					
+				}
 			} while(!valid_ack && timeout_attempts < MAX_TIMEOUT_ATTEMPTS);
-			
+
 			// Check to make sure we didnt have too many handshake attempts
 			if(timeout_attempts >= MAX_TIMEOUT_ATTEMPTS) {
 				error("Unable to complete three-way handshake on SYN_ACK step.\n");
@@ -349,35 +350,7 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 
 			/* Connection established start sending file */
 			/* TODO: Must mask SIGALRM during read and make sure it is in the Window */
-			fd = fileno(fp);
-			while((nread = read(fd, buffer, STCP_MAX_DATA)) > 0) {
-				debug("Read %d bytes from the file '%s'\n", nread, file);
-				// Transmit payload to server
-				len = server_transmit_payload2(sock, pkt->hdr.seq + 1, 0, pkt,
-					process, 0, buffer, nread);
-				// If the read length and the sent length are not the same
-				// Something probably went wrong
-
-//TODO: Fix server_transmit_payload can fail with negative len
-//DEBUG: src/server/server.c:server_transmit_payload:352 Sent -1 bytes to the client
-//ERROR: src/server/server.c:childprocess:248 Read len = 9, Sent len = -13 (they should match)
-
-				if(nread != (len - sizeof(pkt->hdr))) {
-					error("Read len = %d, Sent len = %d (they should match)\n",
-						nread, (len - (int)sizeof(pkt->hdr)));
-					break;
-				}
-			}
-			if(nread < 0) {
-				error("Fatal error when reading from '%s': %s\n", file, strerror(errno));
-				goto clean_up;
-			}
-			warn("Read EOF nread=%d, Sending FIN to client\n", nread);
-			// Send the fin packet
-			len = server_transmit_payload2(sock, pkt->hdr.seq + 1, 0, pkt, 
-				process, STCP_FIN, NULL, 0);
-			// TODO: Receive the FIN_ACK from cleint
-			recv_pkt(sock, &ack, 0);
+			transfer_file(sock, fd, process->interface_win_size, init_seq, rwin_adv);
 		} else {
 			error("Failed to create a socket.\n");
 		}
@@ -387,10 +360,30 @@ clean_up:
 			close(sock);
 		}
 		/* Close the opened file */
-		fclose(fp);
+		if(close(fd) < 0) {
+			error("Error closing file '%s': %s\n", file, strerror(errno));
+		}
 	} else {
-		warn("The file '%s' does not exist on the server.\n", file);
+		error("Error opening file '%s': %s\n", file, strerror(errno));
 	}
+}
+
+int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
+					uint32_t rwin_adv) {
+	int success = 0;
+	Window swin;
+	/* Get ourselves a sliding window buffer */
+	if(win_init(&swin, win_size, init_seq) < 0) {
+		error("Failed to initialize sliding window.\n");
+		return -1;
+	}
+	/* Set the initial Advertised window of the client */
+	swin.rwin_adv = rwin_adv;
+	/* Commence file transfer */
+
+
+	win_destroy(&swin);
+	return success;
 }
 
 static void sigchld_handler(int signum, siginfo_t *siginfo, void *context) {

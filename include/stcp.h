@@ -291,6 +291,20 @@ Elem *win_get(Window *win, int index);
  * Functions only for sender side
  */
 
+/**
+* Returns minimum of cwin, receiver advertised win, sender available window.
+* @param win  The sending window
+* @return Number of Elements we can put in the buffer
+*/
 int win_send_limit(Window *win);
+
+/**
+ * Reads one element from the file and adds it to the window.
+ *
+ * @param win  The sending window
+ * @param fd   The file descriptor open for reading
+ * @return  True if the buffering was succesful, or false on error.
+ */
+int win_buffer_elem(Window *win, int fd);
 
 #endif

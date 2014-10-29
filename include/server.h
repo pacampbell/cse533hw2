@@ -50,6 +50,10 @@ int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt);
  */
 void childprocess(Process *process, struct stcp_pkt *pkt);
 
+
+int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
+                    uint32_t rwin_adv);
+
 /**
  * Handles SIG_CHILD from forked processes. When this signal is
  * received the process from the Processes list will be removed.
@@ -91,15 +95,15 @@ bool server_valid_ack(int size, struct stcp_pkt *pkt);
  * @return Returns the number of bytes transmitted for error checking.
  */
 int server_transmit_payload1(int socket, int seq, int ack, 
-	struct stcp_pkt *pkt, Process *process, int flags, void *data, 
-	int datalen, struct sockaddr_in client);
+    struct stcp_pkt *pkt, Process *process, int flags, void *data, 
+    int datalen, struct sockaddr_in client);
 
 /**
  * Generic function to transmit server payloads to a connected udp socket.
  * @return Returns the number of bytes transmitted for checking.
  */
 int server_transmit_payload2(int socket, int seq, int ack, 
-	struct stcp_pkt *pkt, Process *process, int flags, void *data, 
-	int datalen);
+    struct stcp_pkt *pkt, Process *process, int flags, void *data, 
+    int datalen);
 
 #endif
