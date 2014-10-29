@@ -409,7 +409,7 @@ send_payload:
 				}
 			}
 			/* TODO: Make this timeout vary */
-			set_timeout(1000000);
+			set_timeout(500000);
 			/* receive packet */
 			do {
 				/* Keep checking under the alarm condition until

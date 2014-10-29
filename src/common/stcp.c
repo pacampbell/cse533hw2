@@ -721,7 +721,8 @@ Elem *win_get_index(Window *win, int startoff) {
 
 int win_valid_ACK(Window *win, struct stcp_pkt *pkt) {
 	int valid = 0;
-
+/** TODO get index of elem with seq == ACK */
+/* Then remove all elements less than that */
 	if(pkt != NULL) {
 		if((pkt->hdr.flags & STCP_ACK)
 			&& (pkt->hdr.ack >= win->next_ack)
@@ -729,6 +730,8 @@ int win_valid_ACK(Window *win, struct stcp_pkt *pkt) {
 			valid = 1;
 			/* update the last seen size of the clients buffer */
 			win->rwin_adv = pkt->hdr.win;
+		} else if(pkt->hdr.flags & STCP_FIN) {
+			valid = 1;
 		}
 	}
 	return valid;
@@ -739,6 +742,8 @@ int win_remove_ack(Window *win, uint32_t ack) {
 	if(win_empty(win)) {
 		warn("Window: tried to ack but window was empty\n");
 	} else {
+/** TODO get index of elem with seq == ACK */
+/* Then remove all elements less than that */
 		Elem *elem = win_oldest(win);
 		while(elem != NULL && (elem->pkt.hdr.seq < ack)) {
 			if(!elem->valid) {
