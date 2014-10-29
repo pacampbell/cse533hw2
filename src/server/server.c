@@ -76,7 +76,7 @@ void run(Interface *interfaces, Config *config) {
 	// Packet stuff that should probably be in child.
 	int valid_pkt;
 	struct sockaddr_in connection_addr;
-    socklen_t connection_len = sizeof(connection_addr);
+	socklen_t connection_len = sizeof(connection_addr);
 
 	debug("Server waiting on port %u\n", config->port);
 	while(running) {
@@ -91,11 +91,14 @@ void run(Interface *interfaces, Config *config) {
 		}
 		// Set on FD's
 		if(select(largest_fd + 1, &rset, NULL, NULL, NULL) < 0) {
-            if(errno != EINTR) {
-                error("Fatal Error on select: %s\n", strerror(errno));
-                break;
-            }
-        }
+			if(errno == EINTR) {
+				/* interrupted by a SIGCHLD */
+				continue;
+			} else {
+				error("Fatal Error on select: %s\n", strerror(errno));
+				break;
+			}
+		}
 		// Check to see if any are set
 		node = interfaces;
 		while(node != NULL) {
@@ -104,16 +107,9 @@ void run(Interface *interfaces, Config *config) {
 				debug("Detected connection on interface: <%s> %s\n", node->name, node->ip_address);
 				valid_pkt = recvfrom_pkt(node->sockfd, &pkt, 0, (struct sockaddr *)&connection_addr, &connection_len);
 				if(valid_pkt < 0) {
-					if(errno == EAGAIN || errno == EWOULDBLOCK) {
-						/* False alarm, there was nothing to recv */
-						debug("Socket would have blocked. Skipping socket\n");
-						node = node->next;
-						continue;
-					} else {
-						error("Error on recvfrom: %s\n", strerror(errno));
-						node = node->next;
-						continue;
-					}
+					error("Error on recvfrom: %s\n", strerror(errno));
+					node = node->next;
+					continue;
 				}
 				if(server_valid_syn(valid_pkt, &pkt)) {
 					sigset_t sigchld_mask;
@@ -457,10 +453,10 @@ clean_up:
 }
 
 static void sigchld_handler(int signum, siginfo_t *siginfo, void *context) {
-    int pid;
-    Process *process = NULL;
+	int pid;
+	Process *process = NULL;
 
-    while((pid = waitpid(-1, NULL, WNOHANG)) > 0) {
+	while((pid = waitpid(-1, NULL, WNOHANG)) > 0) {
 		process = get_process_by_pid(processes, pid);
 		if(process != NULL) {
 			if(remove_process(&processes, process)) {
@@ -469,8 +465,8 @@ static void sigchld_handler(int signum, siginfo_t *siginfo, void *context) {
 		} else {
 			error("Unable to find process with pid: %d\n", (int)pid);
 		}
-    }
-   	if(pid == -1) {
+	}
+	if(pid == -1) {
 		if(errno == EINTR) {
 			// Got interrupted by another signal
 			warn("SIGCHLD handler got interrupted\n");
@@ -482,7 +478,7 @@ static void sigchld_handler(int signum, siginfo_t *siginfo, void *context) {
 }
 
 static void set_timeout(unsigned long usec) {
- 	struct itimerval timer;
+	struct itimerval timer;
 	timer.it_value.tv_sec = 0;
 	timer.it_value.tv_usec = usec;
 	timer.it_interval.tv_sec = 0;
