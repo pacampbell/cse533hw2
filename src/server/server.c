@@ -300,7 +300,6 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 					}
 				}
 
-
 				// Calculate timeout
 				tv.tv_sec = timeout_duration;
 				tv.tv_usec = 0;
@@ -338,12 +337,6 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 				error("Unable to complete three-way handshake on SYN_ACK step.\n");
 				goto clean_up;
 			}
-
-			/* Got a good ack packet */
-			#ifdef DEBUG
-				debug("Received pkt from client ");
-				print_hdr(&ack.hdr);
-			#endif
 
 			/* Close original interface socket */
 			if(close(process->interface_fd) != 0) {
@@ -538,10 +531,6 @@ int server_transmit_payload1(int socket, int seq, int ack, struct stcp_pkt *pkt,
 	int bytes = 0;
 	// Set up packet data
 	build_pkt(pkt, seq, ack, process->interface_win_size, flags, data, datalen);
-	#ifdef DEBUG
-		debug("Sending pkt: ");
-		print_hdr(&pkt->hdr);
-	#endif
 	// Send the packet and see what happens
 	bytes = sendto_pkt(socket, pkt, 0, (struct sockaddr*)&client, sizeof(client));
 	if(bytes >= 0) {
@@ -555,10 +544,6 @@ int server_transmit_payload2(int socket, int seq, int ack, struct stcp_pkt *pkt,
 	int bytes = 0;
 	// Set up packet data
 	build_pkt(pkt, seq, ack, process->interface_win_size, flags, data, datalen);
-	#ifdef DEBUG
-		debug("Sending pkt: ");
-		print_hdr(&pkt->hdr);
-	#endif
 	// Send the packet and see what happens
 	bytes = send_pkt(socket, pkt, 0);
 	if(bytes >= 0) {
