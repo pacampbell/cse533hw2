@@ -491,8 +491,9 @@ int win_init(Window *win, int win_size, uint32_t initial_seq) {
 	win->size = win_size;
 	win->next_seq = initial_seq;
 	win->next_ack = initial_seq;
+	win->in_flight = 0;
 	/* Slow Start values */
-	win->cwin = 1;
+	win->cwnd = 1;
 	win->ssthresh = 65535; /* Max value initially */
 	/* Allocate space for the receiving window */
 	win->buf = calloc(win_size, sizeof(Elem));
@@ -656,10 +657,10 @@ Elem *win_get(Window *win, int index) {
  */
 
 int win_send_limit(Window *win) {
-	/* minimum of cwin, receiver advertised win, sender available window */
+	/* minimum of cwnd, receiver advertised win, sender available window */
 	int avail = win_available(win);
-	if(win->cwin < avail) {
-		return (win->cwin < win->rwin_adv)? win->cwin : win->rwin_adv;
+	if(win->cwnd < avail) {
+		return (win->cwnd < win->rwin_adv)? win->cwnd : win->rwin_adv;
 	} else {
 		return (avail < win->rwin_adv)? avail : win->rwin_adv;
 	}

@@ -63,8 +63,9 @@ typedef struct {
 	/* stuff specifically for sending window */
 	uint32_t next_ack;	/* Acknowledgement Number we expect to recv next */
 	/* For Sending */
+	int in_flight;
 	uint16_t rwin_adv;	/* Last seen window size from a reciever ACK */
-	uint16_t cwin;		/* Congestion window value */
+	uint16_t cwnd;		/* Congestion window value */
 	uint16_t ssthresh;	/* Slow Start Threshhold */
 	// TODO: other shit for sending
 } Window;
@@ -292,7 +293,7 @@ Elem *win_get(Window *win, int index);
  */
 
 /**
-* Returns minimum of cwin, receiver advertised win, sender available window.
+* Returns minimum of cwnd, receiver advertised win, sender available window.
 * @param win  The sending window
 * @return Number of Elements we can put in the buffer
 */
