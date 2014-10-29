@@ -423,7 +423,7 @@ send_payload:
 			clear_timeout();
 
 			/* Decrement inflight packet count since ack was valid */
-			swin.in_flight -= win_remove_ack(&win, ack.hdr.ack);
+			swin.in_flight -= win_remove_ack(&swin, ack.hdr.ack);
 
 			/* Check to make sure we didnt do something stupid */
 			if(swin.in_flight < 0) {
