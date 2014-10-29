@@ -380,7 +380,8 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 	swin.rwin_adv = rwin_adv;
 	/* Commence file transfer */
 	do {
-		while(!eof && win_send_limit(&swin)) {
+		while(!eof && win_count(&swin) < win_send_limit(&swin)) {
+			warn("Send limit: %d\n", win_send_limit(&swin));
 			// TODO: Check case when cwin < count
 			if((ret = win_buffer_elem(&swin, fd)) == -1) {
 				/* critical error */
@@ -431,6 +432,7 @@ send_payload:
 
 			/* Check to see if we are done? */
 			if(win_count(&swin) == 0 && eof) {
+				debug("Exiting loop correctly.\n");
 				sending = false;
 				success = true;
 			}
