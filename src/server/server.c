@@ -403,7 +403,7 @@ send_payload:
 			clear_timeout();
 		} else {
 			/* Handle timeout stuff here*/
-			/* goto send */
+			goto send_payload;
 		}
 
 
