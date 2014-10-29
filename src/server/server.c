@@ -352,7 +352,7 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 
 			/* Connection established start sending file */
 			/* TODO: Must mask SIGALRM during read and make sure it is in the Window */
-			transfer_file(sock, fd, process->interface_win_size, init_seq, rwin_adv);
+			transfer_file(sock, fd, process->interface_win_size, init_seq + 1, rwin_adv);
 		} else {
 			error("Failed to create a socket.\n");
 		}
