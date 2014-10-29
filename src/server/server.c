@@ -407,23 +407,20 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 send_payload:
 			/* send up to cwnd packets */
 			for(i = 0; (swin.in_flight < swin.cwnd) && i < win_count(&swin); i++) {
+send_elem:
 				elem = win_get_index(&swin, i);
 				if((ret = send_pkt(sock, &elem->pkt, 0)) == -1) {
-					// We lost a packet so go into second phase
-					wasLoss = true;
 					// Increment the retries attempt
 					retries += 1;
 					// TODO: Resend packet?
 					warn("Failed to send packet to client: %s\n. Attempting to resend.\n", strerror(errno));
 					// TODO: Dangerous resend packet?
 					i--;
-					// Handle nonsense with ssthresh
-					SLOW_START(swin);
 					// Check how many times we have retried
 					CHECK_RETRY(retries);
 					// If we have not performed too many retires
 					// attempt to send again
-					goto send_payload;
+					goto send_elem;
 				} else {
 					swin.in_flight++;
 				}
@@ -476,6 +473,8 @@ send_payload:
 				success = true;
 			}
 		} else {
+			/* Clear the alarm */
+			clear_timeout();
 			/* Handle timeout stuff here*/
 			warn("TODO: Handling timeout.\n");
 			// We lost a packet so go into second phase
@@ -485,12 +484,11 @@ send_payload:
 			// Handle nonsense with ssthresh
 			SLOW_START(swin);
 			// Check how many times we have retried
-			CHECK_RETRY(retries);
+			CHECK_RETRY(retries); // This should be per single element...?
 			// If we got here attempt to send again
 			goto send_payload;
 		}
 	} while(sending);
-
 clean_up:
 	clear_timeout();
 	win_destroy(&swin);
@@ -539,6 +537,7 @@ static void clear_timeout() {
 	timer.it_interval.tv_sec = 0;
 	timer.it_interval.tv_usec = 0;
 	setitimer(ITIMER_REAL, &timer, NULL);
+	debug("Clear timeout\n");
 }
 
 static void sigalrm_timeout(int signum, siginfo_t *siginfo, void *context) {
