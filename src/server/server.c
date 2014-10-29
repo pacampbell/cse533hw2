@@ -396,7 +396,7 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 		if(sigsetjmp(env, 1) == 0) {
 send_payload:
 			/* send up to cwnd packets */
-			for(i = 0; swin.in_flight < swin.cwnd; i++) {
+			for(i = 0; (swin.in_flight < swin.cwnd) && i < win_count(&swin); i++) {
 				elem = win_get_index(&swin, i);
 				if((ret = send_pkt(sock, &elem->pkt, 0)) == -1) {
 					// TODO: Resend packet?
@@ -409,7 +409,7 @@ send_payload:
 				}
 			}
 			/* TODO: Make this timeout vary */
-			set_timeout(1000000);
+			set_timeout(500000);
 			/* receive packet */
 			do {
 				/* Keep checking under the alarm condition until
@@ -422,7 +422,14 @@ send_payload:
 			clear_timeout();
 
 			/* Decrement inflight packet count since ack was valid */
-			swin.in_flight -= win_remove_ack(&swin, ack.hdr.ack);
+			ret = win_remove_ack(&swin, ack.hdr.ack);
+			swin.in_flight -= ret;
+			/* Update cwnd */
+			if(swin.cwnd + ret < swin.ssthresh) {
+				swin.cwnd += ret;
+			} else {
+				warn("ssthresh not implemented.\n");
+			}
 
 			/* Check to make sure we didnt do something stupid */
 			if(swin.in_flight < 0) {
@@ -436,9 +443,9 @@ send_payload:
 				sending = false;
 				success = true;
 			}
-
 		} else {
 			/* Handle timeout stuff here*/
+			warn("TODO: Handling timeout.\n");
 			goto send_payload;
 		}
 	} while(sending);
@@ -474,7 +481,7 @@ static void sigchld_handler(int signum, siginfo_t *siginfo, void *context) {
 	}
 }
 
-static void set_timeout(int usec) {
+static void set_timeout(unsigned long usec) {
  	struct itimerval timer;
 	timer.it_value.tv_sec = 0;
 	timer.it_value.tv_usec = usec;
