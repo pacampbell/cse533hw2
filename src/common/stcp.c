@@ -642,12 +642,12 @@ Elem *win_add_oor(Window *win, Elem *elem) {
 
 Elem *win_get(Window *win, int fwdoff) {
 	Elem *elem = NULL;
-	if(index > win->size) {
-		debug("Window index is too large.\n");
-	} else if (index < 0) {
-		debug("Window index cannot be negative.\n");
+	if(fwdoff > win->size) {
+		debug("Window fwdoff is too large.\n");
+	} else if (fwdoff < 0) {
+		debug("Window fwdoff cannot be negative.\n");
 	} else {
-		elem = &win->buf[(win->end + index) % win->size];
+		elem = &win->buf[(win->end + fwdoff) % win->size];
 	}
 	return elem;
 }
