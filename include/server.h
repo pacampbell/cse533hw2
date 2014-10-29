@@ -68,7 +68,7 @@ static void sigalrm_timeout(int signum, siginfo_t *siginfo, void *context);
 /**
  * Sets the timeout for sigalrm.
  */
-static void set_timeout(unsigned long usec);
+static void set_timeout(long int sec, long int usec);
 
 /**
  * Clears the alarm timer and sets back

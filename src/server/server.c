@@ -359,6 +359,15 @@ clean_up:
 	}
 }
 
+
+#define CHECK_RETRY(c) do{if((c) >= MAX_TIMEOUT_ATTEMPTS){ \
+					error("Failed retries attempt.\n"); \
+					goto clean_up;}}while(0)
+
+#define SLOW_START(c) do{ \
+				(c).ssthresh = (c).cwnd / 2; \
+				(c).cwnd = 1;} while(0)
+
 int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 					uint32_t rwin_adv) {
 	int success = 0, i, ret;
@@ -367,6 +376,8 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 	struct stcp_pkt ack;
 	bool sending = true;
 	bool eof = false;
+	int retries = 0;
+	bool wasLoss = false;
 	/* Get ourselves a sliding window buffer */
 	if(win_init(&swin, win_size, init_seq) < 0) {
 		error("Failed to initialize sliding window.\n");
@@ -376,6 +387,9 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 	swin.rwin_adv = rwin_adv;
 	/* Commence file transfer */
 	do {
+		// set retries to zero
+		retries = 0;
+		// Populate the send buffer
 		while(!eof && win_count(&swin) < win_send_limit(&swin)) {
 			warn("Send limit: %d\n", win_send_limit(&swin));
 			// TODO: Check case when cwin < count
@@ -395,17 +409,27 @@ send_payload:
 			for(i = 0; (swin.in_flight < swin.cwnd) && i < win_count(&swin); i++) {
 				elem = win_get_index(&swin, i);
 				if((ret = send_pkt(sock, &elem->pkt, 0)) == -1) {
+					// We lost a packet so go into second phase
+					wasLoss = true;
+					// Increment the retries attempt
+					retries += 1;
 					// TODO: Resend packet?
 					warn("Failed to send packet to client: %s\n. Attempting to resend.\n", strerror(errno));
 					// TODO: Dangerous resend packet?
 					i--;
+					// Handle nonsense with ssthresh
+					SLOW_START(swin);
+					// Check how many times we have retried
+					CHECK_RETRY(retries);
+					// If we have not performed too many retires
+					// attempt to send again
 					goto send_payload;
 				} else {
 					swin.in_flight++;
 				}
 			}
 			/* TODO: Make this timeout vary */
-			set_timeout(500000);
+			set_timeout(5, 0);
 			/* receive packet */
 			do {
 				/* Keep checking under the alarm condition until
@@ -421,10 +445,17 @@ send_payload:
 			ret = win_remove_ack(&swin, ack.hdr.ack);
 			swin.in_flight -= ret;
 			/* Update cwnd */
+			
 			if(swin.cwnd + ret < swin.ssthresh) {
 				swin.cwnd += ret;
+			} else if(!wasLoss) {
+				// TODO: Keep +1 forever?????
+				warn("No loss - swin.cwnd = %d\n", swin.cwnd);
+				swin.cwnd += 1;
 			} else {
-				warn("ssthresh not implemented.\n");
+				// Congestion avoidence
+				warn("Congestion avoidence - %d\n", swin.cwnd);
+				swin.cwnd += swin.ssthresh * (swin.ssthresh / swin.cwnd);
 			}
 
 			/* Check to make sure we didnt do something stupid */
@@ -442,6 +473,15 @@ send_payload:
 		} else {
 			/* Handle timeout stuff here*/
 			warn("TODO: Handling timeout.\n");
+			// We lost a packet so go into second phase
+			wasLoss = true;
+			// Increment the retries attempt
+			retries += 1;
+			// Handle nonsense with ssthresh
+			SLOW_START(swin);
+			// Check how many times we have retried
+			CHECK_RETRY(retries);
+			// If we got here attempt to send again
 			goto send_payload;
 		}
 	} while(sending);
@@ -477,12 +517,13 @@ static void sigchld_handler(int signum, siginfo_t *siginfo, void *context) {
 	}
 }
 
-static void set_timeout(unsigned long usec) {
+static void set_timeout(long int sec, long int usec) {
 	struct itimerval timer;
 	timer.it_value.tv_sec = 0;
-	timer.it_value.tv_usec = usec;
+	timer.it_value.tv_usec = sec;
 	timer.it_interval.tv_sec = 0;
 	timer.it_interval.tv_usec = usec;
+	debug("Setting timeout for %ld seconds and %ld microseconds.\n", sec, usec);
 	setitimer(ITIMER_REAL, &timer, NULL);
 }
 
