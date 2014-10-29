@@ -161,8 +161,6 @@ int stcp_connect(struct stcp_sock *stcp, struct sockaddr_in *serv_addr, char *fi
 		if(sendSYN) {
 			info("Sending connection request with %u second timeout\n", (uint32_t)tv.tv_sec);
 			/* send first SYN containing the filename in the data field */
-			printf("SYN pkt:");
-			print_hdr(&sent_pkt.hdr);
 			len = send_pkt(stcp->sockfd, &sent_pkt, 0);
 			if(len < 0) {
 				error("Sending SYN packet: %s\n", strerror(errno));
@@ -189,8 +187,6 @@ int stcp_connect(struct stcp_sock *stcp, struct sockaddr_in *serv_addr, char *fi
 				return -1;
 			}
 			/* parse the new port from the server */
-			debug("Recv'd packet: ");
-			print_hdr(&reply_pkt.hdr);
 			/* determine if it was a valid connection reply */
 			if(_valid_SYNACK(&reply_pkt, start_seq)) {
 				uint16_t *p = (uint16_t *)reply_pkt.data;
@@ -231,8 +227,6 @@ int stcp_connect(struct stcp_sock *stcp, struct sockaddr_in *serv_addr, char *fi
 	}
 	/* init ACK packet */
 	build_pkt(&ack_pkt, 0, stcp->win.next_seq, WIN_ADV(stcp->win), STCP_ACK, NULL, 0);
-	debug("Sending ACK to server ");
-	print_hdr(&ack_pkt.hdr);
 	/* Send ACK packet to server */
 	len = send_pkt(stcp->sockfd, &ack_pkt, 0);
 	if(len < 0) {
@@ -278,8 +272,6 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 		Elem *added;
 
 		/* TODO: Validate data packet? */
-		info("Received packet: ");
-		print_hdr(&elem.pkt.hdr);
 
 		/* Buffer and shit */
 		added = win_add_oor(&stcp->win, &elem);
@@ -296,8 +288,6 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 
 		/* TODO update stcp->next_seq */
 		build_pkt(&ack_pkt, 0, stcp->win.next_seq, WIN_ADV(stcp->win), flags, NULL, 0);
-		info("Sending ACK: ");
-		print_hdr(&ack_pkt.hdr);
 		/* Send ACK packet to server */
 		len = send_pkt(stcp->sockfd, &ack_pkt, 0);
 		if(len < 0) {
