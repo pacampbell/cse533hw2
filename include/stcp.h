@@ -305,7 +305,9 @@ int win_send_limit(Window *win);
  *
  * @param win  The sending window
  * @param fd   The file descriptor open for reading
- * @return  True if the buffering was succesful, or false on error.
+ * @return  -1: on fatal error.
+ *           0: If the EOF is reached
+ *          >0: If the EOF was not reached and we Added an elem
  */
 int win_buffer_elem(Window *win, int fd);
 
@@ -318,5 +320,15 @@ int win_buffer_elem(Window *win, int fd);
  * @return pointer to the oldest elem, or NULL if the index is too large.
  */
 Elem *win_get_index(Window *win, int startoff);
+
+/*
+ * Returns true if the packet pointed to by pkt is a valid ACK for the current
+ * state of sending window win.
+ *
+ * @param win  The sending window
+ * @param pkt  The pkt in question
+ * @return True if valid, False if invalid
+ */
+int win_valid_ACK(Window *win, struct stcp_pkt *pkt);
 
 #endif
