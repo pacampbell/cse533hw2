@@ -395,11 +395,16 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 		if(sigsetjmp(env, 1) == 0) {
 send_payload:
 			/* send up to cwnd packets */
-			for(i = 0; swin.in_flight < swin.cwnd; i++, swin.in_flight++) {
+			for(i = 0; swin.in_flight < swin.cwnd; i++) {
 				elem = win_get_index(&swin, i);
 				if((ret = send_pkt(sock, &elem->pkt, 0)) == -1) {
-					warn("Failed to send packet to client: %s\n", strerror(errno));
 					// TODO: Resend packet?
+					warn("Failed to send packet to client: %s\n. Attempting to resend.\n", strerror(errno));
+					// TODO: Dangerous resend packet?
+					i--;
+					goto send_payload;
+				} else {
+					swin.in_flight++;
 				}
 			}
 			/* TODO: Make this timeout vary */
