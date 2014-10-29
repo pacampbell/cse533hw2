@@ -474,6 +474,8 @@ send_elem:
 			warn("TODO: Handling timeout.\n");
 			// We lost a packet so go into second phase
 			wasLoss = true;
+			// Set inflight to zero (everything was lost)
+			swin.in_flight = 0;
 			// Increment the retries attempt
 			retries += 1;
 			// Handle nonsense with ssthresh
