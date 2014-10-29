@@ -493,7 +493,9 @@ int recv_pkt(int sockfd, struct stcp_pkt *pkt, int flags) {
  * Start Circle Buffer Functions
  */
 int win_init(Window *win, int win_size, uint32_t initial_seq) {
+	memset(win, 0, sizeof(Window));
 	/* sliding window size */
+	win->count = 0;
 	win->size = win_size;
 	win->next_seq = initial_seq;
 	win->next_ack = initial_seq;
@@ -522,6 +524,8 @@ int win_count(Window *win) {
 
 int win_available(Window *win) {
 	/* Number of empty elems in the buffer */
+	//error("win->size %hu, win->count %hu, diff: %hu diff int: %d\n",win->size,
+	//	win->count, win->size - win->count, (int)(win->size - win->count));
 	return (win->size - win->count);
 }
 
@@ -540,9 +544,10 @@ Elem *win_add(Window *win, Elem *elem) {
 			debug("Tried to add elem when the Window was full!\n");
 		} else {
 			/* Copy the elem into the ending index and mark it as valid */
+			debug("Adding Elem at index %hu\n", win->end);
 			added = &win->buf[win->end];
 			memcpy(added, elem, sizeof(Elem));
-			elem->valid = 1;
+			added->valid = 1;
 			/* Advance the end index and increment our elem count */
 			win->count += 1;
 			win->end = (win->end + 1) % win->size;
@@ -560,6 +565,7 @@ void win_remove(Window *win) {
 	if(win_empty(win)) {
 		debug("Tried to remove elem when the Window was empty!\n");
 	} else {
+		debug("Removing Elem at index: %hu\n", win->start);
 		/* Remove the elem at the start */
 		win->buf[win->start].valid = 0;
 		/* Advance the start index and decrement count */
@@ -721,6 +727,8 @@ int win_valid_ACK(Window *win, struct stcp_pkt *pkt) {
 			&& (pkt->hdr.ack >= win->next_ack)
 			&& (pkt->hdr.ack <= (win->next_ack + win->count))) {
 			valid = 1;
+			/* update the last seen size of the clients buffer */
+			win->rwin_adv = pkt->hdr.win;
 		}
 	}
 	return valid;
@@ -733,8 +741,14 @@ int win_remove_ack(Window *win, uint32_t ack) {
 	} else {
 		Elem *elem = win_oldest(win);
 		while(elem != NULL && (elem->pkt.hdr.seq < ack)) {
+			if(!elem->valid) {
+				warn("Elem is invalid but is treated as buffered\n");
+			}
 			win_remove(win);
 			++count;
+			if(win_empty(win)) {
+				break;
+			}
 			elem = win_oldest(win);
 		}
 	}
