@@ -45,8 +45,6 @@ int main(int argc, char *argv[]) {
 				error("Unable to set SIGALRM sigaction.\n");
 				goto clean_up;
 			}
-			/* Set the alarm timer */
-			
 			/* Start the servers main loop */
 			run(interfaces, &config);
 		} else {
@@ -116,7 +114,7 @@ void run(Interface *interfaces, Config *config) {
 
 					sigemptyset(&sigchld_mask);
 					sigaddset(&sigchld_mask, SIGCHLD);
-					/* Block SIGCHLD unitl we add the child procces to the list */
+					/* Block SIGCHLD until we add the child procces to the list */
 					if(sigprocmask(SIG_BLOCK, &sigchld_mask, NULL) < 0){
 						error("Error blocking SIGCHLD sigprocmask: %s\n", strerror(errno));
 					}
@@ -168,7 +166,7 @@ void run(Interface *interfaces, Config *config) {
 						error("Error unblocking SIGCHLD sigprocmask: %s\n", strerror(errno));
 					}
 				} else {
-					debug("Ignoring invalid SYN pakcet.\n");
+					debug("Ignoring invalid SYN packet.\n");
 				}
 			}
 			node = node->next;
@@ -183,7 +181,7 @@ int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 	switch(pid = fork()) {
 		case -1:
 			/* Failed */
-			error("Failed to fork child env.\n");
+			error("Failed to fork child process.\n");
 			break;
 		case 0:
 			/* In child */
@@ -292,7 +290,7 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 						&server_addr.sin_port, sizeof(server_addr.sin_port));
 					// TODO: Better error checking?
 					if(len < 0) {
-						error("Failed to send SYN_ACK on out of band udp socket.\n");
+						error("Failed to send SYN_ACK on out of band UDP socket.\n");
 					}
 				}
 
@@ -313,7 +311,7 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 					if(!valid_ack) {
 						timeout_attempts++;
 						timeout_duration += timeout_duration;
-						warn("Recevied packet on SYN_ACK but incorrect type. Attempt: %d - Waiting %d seconds\n", timeout_attempts, timeout_duration);
+						warn("Received packet on SYN_ACK but incorrect type. Attempt: %d - Waiting %d seconds\n", timeout_attempts, timeout_duration);
 					} else {
 						/* The advertised window size of the client */
 						rwin_adv = ack.hdr.win;
@@ -377,6 +375,7 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 	struct stcp_pkt ack;
 	bool sending = true;
 	bool eof = false;
+	bool deadlock = false;
 	int retries = 0;
 	/* Get ourselves a sliding window buffer */
 	if(win_init(&swin, win_size, init_seq) < 0) {
@@ -396,17 +395,16 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 			if((ret = win_buffer_elem(&swin, fd)) == -1) {
 				/* critical error */
 				goto clean_up;
-			} else if(ret == 0) {
-				eof = true;
 			} else {
-				debug("Buffered packet succesfully.\n");
+				eof = ret? false : true;
+				debug("Buffered packet successfully.\n");
 			}
 		}
 		/* Set the longjump marker here */
 		if(sigsetjmp(env, 1) == 0) {
 send_payload:
 			/* send up to cwnd packets */
-			for(i = swin.in_flight; (swin.in_flight < swin.cwnd) && i < win_count(&swin); i++) {
+			for(i = swin.in_flight; ((swin.in_flight < swin.cwnd) && i < win_count(&swin)) || deadlock; i++) {
 send_elem:
 				elem = win_get_index(&swin, i);
 				if((ret = send_pkt(sock, &elem->pkt, 0)) == -1) {
@@ -421,6 +419,8 @@ send_elem:
 					goto send_elem;
 				} else {
 					swin.in_flight++;
+					/* reset TCP deadlock so we dont send packets forever */
+					deadlock = false;
 				}
 			}
 			/* TODO: Make this timeout vary */
@@ -428,8 +428,8 @@ send_elem:
 			/* receive packet */
 			do {
 				if(swin.dup_ack == STCP_FAST_RETRANSMIT) {
-					/* Do Fast Restransmit */
-					warn("Fast Restransmit not implemented!\n");
+					/* Do Fast Retransmit */
+					warn("Fast Retransmit not implemented!\n");
 				}
 				/* Keep checking under the alarm condition until
 				   we timeout or get a good ack. */
@@ -456,12 +456,12 @@ send_elem:
 				}
 				warn("Updated cwnd to %hu\n", swin.cwnd);
 			} else {
-				// TODO: Fix Congestion avoidence increment
-				warn("Congestion avoidence cwnd: %hu\n", swin.cwnd);
+				// TODO: Fix Congestion avoidance increment
+				warn("Congestion avoidance cwnd: %hu\n", swin.cwnd);
 				swin.cwnd += swin.ssthresh * (swin.ssthresh / swin.cwnd);
 			}
 
-			/* Check to make sure we didnt do something stupid */
+			/* Check to make sure we didn't do something stupid */
 			if(swin.in_flight < 0) {
 				error("Negative window.in_flight value.\n");
 				goto clean_up;
@@ -482,6 +482,20 @@ send_elem:
 			swin.in_flight = 0;
 			// Increment the retries attempt
 			retries += 1;
+			if(swin.rwin_adv == 0) {
+				/* Handle TCP DEADLOCK */
+				deadlock = true;
+				warn("Entering TCP deadlock avoidance.\n");
+				/* if the window is empty and we deadlocked add another Elem! */
+				if(win_empty(&swin)) {
+					if((ret = win_buffer_elem(&swin, fd)) < 0) {
+						goto clean_up;
+					} else {
+						eof = ret? false : true;
+						debug("Buffered deadlock avoidance packet.\n");
+					}
+				}
+			}
 			// Handle nonsense with ssthresh
 			SLOW_START(swin);
 			// Check how many times we have retried
@@ -504,7 +518,7 @@ static void sigchld_handler(int signum, siginfo_t *siginfo, void *context) {
 		process = get_process_by_pid(processes, pid);
 		if(process != NULL) {
 			if(remove_process(&processes, process)) {
-				info("Successfuly removed the process %d\n", (int)pid);
+				info("Successfully removed the process %d\n", (int)pid);
 			}
 		} else {
 			error("Unable to find process with pid: %d\n", (int)pid);

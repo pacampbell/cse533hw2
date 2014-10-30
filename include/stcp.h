@@ -313,7 +313,6 @@ int win_send_limit(Window *win);
  */
 int win_buffer_elem(Window *win, int fd);
 
-
 /**
  * Returns the elem at offset startoff from the start of the window. Or NULL
  * if the offset is too large.
