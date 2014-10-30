@@ -177,7 +177,8 @@ int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 			break;
 		case 0:
 			/* In child */
-			info("Server Child - PID: %d\n", (int)getpid());
+			process->pid = getpid();
+			info("Server Child - PID: %d\n", process->pid);
 			/* Close unneeded parent FD */
 			interface = interfaces;
 			while(interface != NULL) {
@@ -191,18 +192,17 @@ int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 				interface = interface->next;
 			}
 			childprocess(process, pkt);
-			info("Child process has finished; pid = %d\n", (int)getpid());
+			info("Child process has finished; pid = %d\n", process->pid);
 			/* Clean up memory */
-			debug("Freeing interfaces list - %d.\n", (int)getpid());
+			debug("Freeing interfaces list - %d.\n", process->pid);
 			destroy_interfaces(&interfaces);
 			/* Free up any process information that is left over */
-			debug("Freeing processes list - %d.\n", (int)getpid());
+			debug("Freeing processes list - %d.\n", process->pid);
 			destroy_processes(&processes);
 			// Quit the child
 			exit(EXIT_SUCCESS);
 			break;
 		default:
-			/* TODO: ADD HERE */
 			/* In parent */
 			process->pid = pid;
 			info("Main Server - Child PID: %d\n", pid);
