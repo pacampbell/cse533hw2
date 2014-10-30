@@ -366,6 +366,7 @@ clean_up:
 
 #define SLOW_START(c) do{ \
 				(c).ssthresh = (c).cwnd / 2; \
+				if((c).ssthresh == 0){(c).ssthresh = 1;}\
 				(c).cwnd = 1;} while(0)
 
 int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
@@ -377,7 +378,6 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 	bool sending = true;
 	bool eof = false;
 	int retries = 0;
-	bool wasLoss = false;
 	/* Get ourselves a sliding window buffer */
 	if(win_init(&swin, win_size, init_seq) < 0) {
 		error("Failed to initialize sliding window.\n");
@@ -414,8 +414,6 @@ send_elem:
 					retries += 1;
 					// TODO: Resend packet?
 					warn("Failed to send packet to client: %s\n. Attempting to resend.\n", strerror(errno));
-					// TODO: Dangerous resend packet?
-					i--;
 					// Check how many times we have retried
 					CHECK_RETRY(retries);
 					// If we have not performed too many retires
@@ -436,7 +434,7 @@ send_elem:
 				/* Keep checking under the alarm condition until
 				   we timeout or get a good ack. */
 				ret = recv_pkt(sock, &ack, 0);
-				/* what if we get SIGALRM here????? */
+				/* what if we get SIGALRM here????? Race condition */
 				if(ret < 1) {
 					warn("Received a bad packet.\n");
 				}
@@ -447,16 +445,15 @@ send_elem:
 			ret = win_remove_ack(&swin, &ack);
 			swin.in_flight -= ret;
 			/* Update cwnd */
-			
-			if(swin.cwnd + ret < swin.ssthresh) {
-				swin.cwnd += ret;
-			} else if(!wasLoss) {
-				// TODO: Keep +1 forever?????
-				warn("No loss - swin.cwnd = %d\n", swin.cwnd);
-				swin.cwnd += 1;
+			if(swin.cwnd < swin.ssthresh) {
+				if(swin.cwnd + ret < swin.ssthresh) {
+					swin.cwnd += ret;
+				} else {
+					swin.cwnd = swin.ssthresh;
+				}
 			} else {
-				// Congestion avoidence
-				warn("Congestion avoidence - %d\n", swin.cwnd);
+				// TODO: Fix Congestion avoidence increment
+				warn("Congestion avoidence - %hu\n", swin.cwnd);
 				swin.cwnd += swin.ssthresh * (swin.ssthresh / swin.cwnd);
 			}
 
@@ -477,8 +474,6 @@ send_elem:
 			clear_timeout();
 			/* Handle timeout stuff here*/
 			warn("TODO: Handling timeout.\n");
-			// We lost a packet so go into second phase
-			wasLoss = true;
 			// Increment the retries attempt
 			retries += 1;
 			// Handle nonsense with ssthresh
