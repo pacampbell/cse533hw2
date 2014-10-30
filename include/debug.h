@@ -4,7 +4,7 @@
 #include <unistd.h>
 
 // Colors
-#if defined(COLOR) && COLOR >= 8
+#ifdef COLOR
 	#define KNRM  "\x1B[0m"
 	#define KRED  "\x1B[1;31m"
 	#define KGRN  "\x1B[1;32m"
