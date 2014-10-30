@@ -406,7 +406,7 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 		if(sigsetjmp(env, 1) == 0) {
 send_payload:
 			/* send up to cwnd packets */
-			for(i = 0; (swin.in_flight < swin.cwnd) && i < win_count(&swin); i++) {
+			for(i = swin.in_flight; (swin.in_flight < swin.cwnd) && i < win_count(&swin); i++) {
 send_elem:
 				elem = win_get_index(&swin, i);
 				if((ret = send_pkt(sock, &elem->pkt, 0)) == -1) {
