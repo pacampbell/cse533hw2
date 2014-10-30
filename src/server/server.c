@@ -474,6 +474,8 @@ send_elem:
 			clear_timeout();
 			/* Handle timeout stuff here*/
 			warn("TODO: Handling timeout.\n");
+			// Set inflight to zero (everything was lost)
+			swin.in_flight = 0;
 			// Increment the retries attempt
 			retries += 1;
 			// Handle nonsense with ssthresh
