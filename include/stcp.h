@@ -280,7 +280,16 @@ void win_clear(Window *win);
  * Functions only for receiver side
  */
 
-Elem *win_add_oor(Window *win, Elem *elem);
+/**
+ * Adds the Elem pointed to by elem into the Window potentially buffering
+ * the element out of order. This function returns true if the last element
+ * in the window after inserting elem is the FIN packet.
+ *
+ * @param win  The Window
+ * @param elem The Elem to append to the window
+ * @return True if the FIN is in the window, else false
+ */
+int win_add_oor(Window *win, Elem *elem);
 
 /**
  * Returns the elem at offset fwdoff. Or NULL if the index is too large.

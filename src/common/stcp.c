@@ -196,8 +196,6 @@ int stcp_connect(struct stcp_sock *stcp, struct sockaddr_in *serv_addr, char *fi
 					/* break out out the loop */
 					break;
 				}
-			} else {
-				warn("Invalid packet\n");
 			}
 			/* Don't resend the SYN just wait for a valid response */
 			sendSYN = 0;
@@ -209,7 +207,6 @@ int stcp_connect(struct stcp_sock *stcp, struct sockaddr_in *serv_addr, char *fi
 			/* Reset the timeout */
 			tv.tv_sec = timeout;
 			tv.tv_usec = 0L;
-			printf("Connect timeout! ");
 			if (retries > max_retries) {
 				printf("Aborting connection attempt.\n");
 				return -1;
@@ -269,30 +266,18 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 		/* The recv_pkt was invalid */
 		done = 0;
 	} else {
-		Elem *added;
-
-		/* TODO: Validate data packet? */
-
-		/* Buffer and shit */
-		added = win_add_oor(&stcp->win, &elem);
+		/* Add the (potentially out-of-order) data packet */
+		done = win_add_oor(&stcp->win, &elem);
 		flags = STCP_ACK;
-		if(added != NULL) {
-			/* Initialize ACK packet */
-			if(added->pkt.hdr.flags & STCP_FIN) {
-				info("Producer: buffered FIN, sending FIN ACK.\n");
-				flags |= STCP_FIN;
-				/* set done to 1 to indicate we sent the FIN ACK */
-				done = 1;
-			}
+		if(done) {
+			info("Producer: buffered FIN, sending FIN ACK.\n");
+			flags |= STCP_FIN;
 		}
 		build_pkt(&ack_pkt, 0, stcp->win.next_seq, WIN_ADV(stcp->win), flags, NULL, 0);
 		/* Send ACK packet to server */
 		len = send_pkt(stcp->sockfd, &ack_pkt, 0);
 		if(len < 0) {
-			error("Failed to send ACK handshake, send: %s", strerror(errno));
-			done = -1;
-		} else if(len == 0) {
-			error("send_pkt failed to write any data\n");
+			error("Failed to send: %s", strerror(errno));
 			done = -1;
 		}
 	}
@@ -603,10 +588,10 @@ void win_clear(Window *win) {
  * Functions only for receiver side
  */
 
-Elem *win_add_oor(Window *win, Elem *elem) {
+int win_add_oor(Window *win, Elem *elem) {
 	uint32_t seq = elem->pkt.hdr.seq;
 	uint32_t fwdoff; /* fwd offset of elem seq */
-	Elem *newelem = NULL;
+	Elem *new_end = NULL;
 
 	if(seq < win->next_seq) {
 		fwdoff = win->next_seq - seq;
@@ -618,12 +603,14 @@ Elem *win_add_oor(Window *win, Elem *elem) {
 	if(fwdoff == 0) {
 		Elem *temp;
 		/* we can just use regular add */
-		newelem = win_add(win, elem);
-		/* TODO: advance past already buffered data */
+		new_end = win_add(win, elem);
+		/* Advance past already buffered data */
 		temp = win_end(win);
 		while((temp->valid) && (temp->pkt.hdr.seq == win->next_seq)) {
-			debug("Added missing seq: %u, moving window end to send cumulative ACK\n", win->next_seq - 1);
+			debug("Added missing seq: %u, moving window end to send cumulative ACK\n",
+					win->next_seq - 1);
 			/* Advance the end index and increment our elem count */
+			new_end = temp;
 			win->count += 1;
 			win->end = (win->end + 1) % win->size;
 			win->next_seq += 1;
@@ -631,19 +618,26 @@ Elem *win_add_oor(Window *win, Elem *elem) {
 		}
 
 	} else if(fwdoff < win_available(win)) {
-		Elem *newelem = win_get(win, fwdoff);
-		if(newelem->valid) {
+		Elem *oor_elem;
+
+		oor_elem = win_get(win, fwdoff);
+		if(oor_elem->valid) {
 			debug("Recv window already buffered seq: %u\n", seq);
 		} else {
-			memcpy(newelem, elem, sizeof(Elem));
-			newelem->valid = 1;
+			memcpy(oor_elem, elem, sizeof(Elem));
+			oor_elem->valid = 1;
 		}
 	} else {
 		/* no room in buffer */
 		debug("Recv window full. Dropping packet\n");
 	}
 
-	return newelem;
+	/* check if the last element in the window is the FIN and is readable */
+	if(new_end != NULL && new_end->pkt.hdr.flags & STCP_FIN) {
+		return 1;
+	} else {
+		return 0;
+	}
 }
 
 Elem *win_get(Window *win, int fwdoff) {
