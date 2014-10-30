@@ -105,7 +105,7 @@ int valid_pkt(struct stcp_pkt *pkt);
  * @param sent_seq The starting sequence number we sent in our SYN
  * @return 1 if valid, 0 if invalid
  */
-int _valid_SYNACK(struct stcp_pkt *pkt, uint32_t sent_seq);
+int valid_synack(struct stcp_pkt *pkt, uint32_t sent_seq);
 
 /*
  * Initialize a stcp_sock from the given socket. sockfd must haven been
@@ -183,7 +183,7 @@ int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
  * @param pkt Will be returned in host order
  * @return -1: on system call error, check errno
  *          0: if the packet is too small or is invalid
- *         >0: if packet is valid
+ *          1: if packet is valid
  */
 int recv_pkt(int sockfd, struct stcp_pkt *pkt, int flags);
 int recvfrom_pkt(int sockfd, struct stcp_pkt *pkt, int flags,

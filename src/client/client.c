@@ -1,7 +1,7 @@
 #include "client.h"
 
 int main(int argc, char *argv[]) {
-	int fd, rv;
+	int fd, rv, err = 0;
 	char *path = "client.in";
 	Config config;
 	struct sockaddr_in serv_addr, client_addr;
@@ -72,27 +72,38 @@ int main(int argc, char *argv[]) {
 		error("pthread_create: %s\n", strerror(rv));
 		goto stcp_failure;
 	}
-	/* Start Producing  */
-	if(runProducer(&stcp) < 0) {
-		error("Producer failed! Canceling Consumer thread.\n");
-		/* Cancel the Consumer thread */
-		if((rv = pthread_cancel(ptid) != 0))
-			error("pthread_cancel: %s\n", strerror(rv));
-		/* wait for the consumer to cancel */
-		if((rv = pthread_join(ptid, NULL)) < 0)
-			error("pthread_join: %s\n", strerror(rv));
+	/* destroy pthread attributes */
+	if(pthread_attr_destroy(&pattr)) {
+		perror("main: pthread_attr_destroy");
 		goto stcp_failure;
 	}
+	/* Start Producing  */
+	if(runProducer(&stcp) < 0) {
+		error("Producer: failed to buffer entire file '%s' from %s:%u\n",
+			config.filename,inet_ntoa(serv_addr.sin_addr),serv_addr.sin_port);
+		/* Cancel the Consumer thread */
+		if((rv = pthread_cancel(ptid) != 0)){
+			error("pthread_cancel: %s\n", strerror(rv));
+		}
+		err = 1;
+	} else {
+		success("Producer: Buffered entire file '%s' from %s:%u\n",
+			config.filename,inet_ntoa(serv_addr.sin_addr),serv_addr.sin_port);
+	}
+	info("Waiting on consumer thread...\n");
 	/* wait for the consumer to finish reading all the data */
 	if((rv = pthread_join(ptid, (void **)&exit_status)) < 0) {
 		errno = rv;
 		perror("main: pthread_join");
 		goto stcp_failure;
 	}
-	debug("Consumer thread joined: thread exit status: %d\n", *exit_status);
-	if(*exit_status < 0) {
+	if(*exit_status == 1) {
+		success("Consumer: read entire file from receiving window.\n");
+	} else {
 		/* Consumer thread failed */
-		error("Consumer thread failed!\n");
+		error("Consumer: failed to read entire file from receiving window.\n");
+		free(exit_status);
+		goto stcp_failure;
 	}
 	/* free thread's return status */
 	free(exit_status);
@@ -101,13 +112,11 @@ int main(int argc, char *argv[]) {
 		perror("main: stcp_close");
 		exit(EXIT_FAILURE);
 	}
-	/* destroy pthread attributes */
-	if(pthread_attr_destroy(&pattr)) {
-		perror("main: pthread_attr_destroy");
-		exit(EXIT_FAILURE);
-	}
-	return EXIT_SUCCESS;
-	stcp_failure:
+	if(err)
+		return EXIT_FAILURE;
+	else
+		return EXIT_SUCCESS;
+stcp_failure:
 	/* close the STCP socket */
 	stcp_close(&stcp);
 	return EXIT_FAILURE;
@@ -277,7 +286,8 @@ void *runConsumer(void *arg) {
 			*retval = -1;
 			pthread_exit(retval);
 		} else if(rv == 0) {
-			/* EOF */
+			/* Consumer read EOF */
+			*retval = 1;
 			break;
 		}
 		/* Re-enable cancelability */

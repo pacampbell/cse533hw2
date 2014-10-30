@@ -55,7 +55,7 @@ int valid_pkt(struct stcp_pkt *pkt) {
 	return valid;
 }
 
-int _valid_SYNACK(struct stcp_pkt *pkt, uint32_t sent_seq) {
+int valid_synack(struct stcp_pkt *pkt, uint32_t sent_seq) {
 	if(!(pkt->hdr.flags & (STCP_SYN | STCP_ACK))) {
 		error("Packet flags: SYN and ACK not set!\n");
 		return 0;
@@ -157,7 +157,6 @@ int stcp_connect(struct stcp_sock *stcp, struct sockaddr_in *serv_addr, char *fi
 	build_pkt(&sent_pkt, start_seq, 0, WIN_ADV(stcp->win), STCP_SYN, file, strlen(file));
 	/* attempt to connect backed by timeout */
 	while (1) {
-		int maxfd;
 		if(sendSYN) {
 			info("Sending connection request with %u second timeout\n", (uint32_t)tv.tv_sec);
 			/* send first SYN containing the filename in the data field */
@@ -172,8 +171,7 @@ int stcp_connect(struct stcp_sock *stcp, struct sockaddr_in *serv_addr, char *fi
 		}
 		FD_ZERO(&rset);
 		FD_SET(stcp->sockfd, &rset);
-		maxfd = stcp->sockfd + 1;
-		if(select(maxfd, &rset, NULL, NULL, &tv) < 0) {
+		if(select(stcp->sockfd + 1, &rset, NULL, NULL, &tv) < 0) {
 			error("Select: %s", strerror(errno));
 			return -1;
 		}
@@ -185,22 +183,24 @@ int stcp_connect(struct stcp_sock *stcp, struct sockaddr_in *serv_addr, char *fi
 						inet_ntoa(serv_addr->sin_addr), ntohs(serv_addr->sin_port),
 						strerror(errno));
 				return -1;
-			}
-			/* parse the new port from the server */
-			/* determine if it was a valid connection reply */
-			if(_valid_SYNACK(&reply_pkt, start_seq)) {
-				uint16_t *p = (uint16_t *)reply_pkt.data;
-				/* port should be the only 2 bytes of data in host order */
-				newport = ntohs(*p);
-				info("Received SYN+ACK with new port: %hu\n", newport);
-				/* update the initial seq */
-				reply_seq = reply_pkt.hdr.seq;
-				/* break out out the loop */
-				break;
+			} else if(len == 1) {
+				/* determine if it was a valid connection reply */
+				if(valid_synack(&reply_pkt, start_seq)) {
+					/* parse the new port from the server */
+					uint16_t *p = (uint16_t *)reply_pkt.data;
+					/* port should be the only 2 bytes of data in host order */
+					newport = ntohs(*p);
+					info("Received SYN+ACK with new port: %hu\n", newport);
+					/* update the initial seq */
+					reply_seq = reply_pkt.hdr.seq;
+					/* break out out the loop */
+					break;
+				}
 			} else {
-				/* Don't resend the SYN just wait for a valid response */
-				sendSYN = 0;
+				warn("Invalid packet\n");
 			}
+			/* Don't resend the SYN just wait for a valid response */
+			sendSYN = 0;
 		} else {
 			/* timeout reached! */
 			retries++;
@@ -390,16 +390,17 @@ void client_set_loss(unsigned int seed, double loss) {
 int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 		struct sockaddr *dest_addr, socklen_t addrlen) {
 	int rv;
+	/* DROP */
+	if(rand() < loss_thresh) {
+		warn("Dropped on sendto ");
+		print_hdr(&pkt->hdr);
+		/* return as if we succeeded */
+		return sizeof(struct stcp_hdr) + pkt->dlen;
+	}
 #ifdef DEBUG
 	debug("Sending pkt: ");
 	print_hdr(&pkt->hdr);
 #endif
-	/* DROP */
-	if(rand() < loss_thresh) {
-		warn("Artificially dropped on sendto ");
-		print_hdr(&pkt->hdr);
-		return sizeof(struct stcp_hdr) + pkt->dlen;
-	}
 	/* convert stcp_hdr into network order */
 	hton_hdr(&pkt->hdr);
 	rv = sendto(sockfd, pkt, sizeof(struct stcp_hdr) + pkt->dlen, flags,
@@ -411,16 +412,17 @@ int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 
 int send_pkt(int sockfd, struct stcp_pkt *pkt, int flags) {
 	int rv;
+	/* DROP */
+	if(rand() < loss_thresh) {
+		warn("Dropped on send ");
+		print_hdr(&pkt->hdr);
+		/* return as if we succeeded */
+		return sizeof(struct stcp_hdr) + pkt->dlen;
+	}
 #ifdef DEBUG
 	debug("Sending pkt: ");
 	print_hdr(&pkt->hdr);
 #endif
-	/* DROP */
-	if(rand() < loss_thresh) {
-		warn("Artificially dropped on send ");
-		print_hdr(&pkt->hdr);
-		return sizeof(struct stcp_hdr) + pkt->dlen;
-	}
 	/* convert stcp_hdr into network order */
 	hton_hdr(&pkt->hdr);
 	rv = send(sockfd, pkt, sizeof(struct stcp_hdr) + pkt->dlen, flags);
@@ -435,12 +437,6 @@ int recvfrom_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 	rv = recvfrom(sockfd, pkt, STCP_MAX_SEG, flags, src_addr, addrlen);
 	/* convert stcp_hdr into host order */
 	ntoh_hdr(&pkt->hdr);
-	/* DROP */
-	if(rand() < loss_thresh) {
-		warn("Artificially dropped on recvfrom ");
-		print_hdr(&pkt->hdr);
-		return 0;
-	}
 	/* set data length */
 	pkt->dlen = rv - sizeof(struct stcp_hdr);
 	if(rv > 0) {
@@ -450,6 +446,12 @@ int recvfrom_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 		} else {
 			/* might be valid */
 			rv = valid_pkt(pkt);
+			/* DROP valid packets */
+			if(rv && (rand() < loss_thresh)) {
+				warn("Dropped on recvfrom: ");
+				print_hdr(&pkt->hdr);
+				return 0;
+			}
 		}
 #ifdef DEBUG
 		debug("Received pkt: ");
@@ -464,12 +466,6 @@ int recv_pkt(int sockfd, struct stcp_pkt *pkt, int flags) {
 	rv = recv(sockfd, pkt, STCP_MAX_SEG, flags);
 	/* convert stcp_hdr into host order */
 	ntoh_hdr(&pkt->hdr);
-	/* DROP */
-	if(rand() < loss_thresh) {
-		warn("Artificially dropped on recv ");
-		print_hdr(&pkt->hdr);
-		return 0;
-	}
 	/* set data length */
 	pkt->dlen = rv - sizeof(struct stcp_hdr);
 	if(rv > 0) {
@@ -479,6 +475,12 @@ int recv_pkt(int sockfd, struct stcp_pkt *pkt, int flags) {
 		} else {
 			/* might be valid */
 			rv = valid_pkt(pkt);
+			/* DROP valid packets */
+			if(rv && (rand() < loss_thresh)) {
+				warn("Dropped on recv: ");
+				print_hdr(&pkt->hdr);
+				return 0;
+			}
 		}
 #ifdef DEBUG
 		debug("Received pkt: ");

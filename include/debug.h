@@ -36,7 +36,7 @@
 	#define error(S, ...) do{fprintf(stderr, KRED "ERROR: " S KNRM, ##__VA_ARGS__);} while(0)
 	#define warn(S, ...) do{fprintf(stderr, KYEL "WARN: " S KNRM, ##__VA_ARGS__);} while(0)
 	#define info(S, ...) do{fprintf(stdout, KCYN "INFO: " S KNRM, ##__VA_ARGS__);} while(0)
-	#define success(S, ...) do{fprintf(stdout, KGRN "SUCCESS: %s:%s:%d " S KNRM, ##__VA_ARGS__);} while(0)
+	#define success(S, ...) do{fprintf(stdout, KGRN "SUCCESS: " S KNRM, ##__VA_ARGS__);} while(0)
 #endif
 
 #endif

@@ -298,21 +298,23 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 				} else if(select_result == -1) {
 					error("Select failed with error: %s\n", strerror(errno));
 				} else if (FD_ISSET(sock, &handshake_set)) {
-					if((len = recv_pkt(sock, &ack, 0)) < 0) {
-						error("Fatal error on recv: %s\n", strerror(errno));
-						goto clean_up;
+					int valid_pkt;
+					if((valid_pkt = recv_pkt(sock, &ack, 0)) < 0) {
+						if(errno == ECONNREFUSED) {
+							warn("Client has not connected to port %hu yet!\n", ntohs(server_addr.sin_port));
+							timeout_attempts++;
+							timeout_duration += timeout_duration;
+						} else {
+							error("Fatal error on recv: %s\n", strerror(errno));
+							goto clean_up;
+						}
+					} else if(valid_pkt == 1) {
+						if(ack.hdr.flags & STCP_ACK) {
+							/* The advertised window size of the client */
+							rwin_adv = ack.hdr.win;
+							valid_ack = 1;
+						}
 					}
-					valid_ack = server_valid_ack(len, &ack);
-					if(!valid_ack) {
-						timeout_attempts++;
-						timeout_duration += timeout_duration;
-						warn("Received packet on SYN_ACK but incorrect type. Attempt: %d - Waiting %d seconds\n", timeout_attempts, timeout_duration);
-					} else {
-						/* The advertised window size of the client */
-						rwin_adv = ack.hdr.win;
-					}
-				} else {
-					warn("An FD not in the handshake_set was set?\n");
 				}
 				// Break out of the loop and quit attempting to serve this client
 				if(timeout_attempts >= MAX_TIMEOUT_ATTEMPTS) {
@@ -433,6 +435,12 @@ send_elem:
 				if(swin.dup_ack == STCP_FAST_RETRANSMIT) {
 					/* Do Fast Retransmit */
 					warn("Fast Retransmit not implemented!\n");
+					if(swin.cwnd > 1){
+						swin.cwnd = swin.cwnd/2;
+					}
+					swin.ssthresh = swin.cwnd;
+					swin.in_flight = 0;
+					goto send_payload;
 				}
 				/* Keep checking under the alarm condition until
 				   we timeout or get a good ack. */
