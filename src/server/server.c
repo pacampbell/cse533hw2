@@ -321,7 +321,7 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 				}
 			} while(!valid_ack && timeout_attempts < MAX_TIMEOUT_ATTEMPTS);
 
-			// Check to make sure we didnt have too many handshake attempts
+			// Check to make sure we didn't have too many handshake attempts
 			if(timeout_attempts >= MAX_TIMEOUT_ATTEMPTS) {
 				error("Unable to complete three-way handshake on SYN_ACK step.\n");
 				goto clean_up;
@@ -422,7 +422,7 @@ send_elem:
 					goto send_elem;
 				} else {
 					swin.in_flight++;
-					/* reset TCP deadlock so we dont send packets forever */
+					/* reset TCP deadlock so we don't send packets forever */
 					deadlock = false;
 				}
 			}

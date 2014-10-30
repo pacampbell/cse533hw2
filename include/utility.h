@@ -22,11 +22,11 @@ typedef struct {
 	unsigned short port;
 	unsigned int win_size;		/* Maximum window size (in datagram units) */
 	/* additional config for the client */
-	struct in_addr serv_addr;	/* the ipv4 server address        */
-	char filename[BUFFER_SIZE];	/* the filename to be transferred */
-	unsigned int seed;			/* Random generator seed value    */
-	double loss;				/* Probability of datagram loss   */
-	unsigned int mean;			/* Mean of exp. dist. in millisec */
+	struct in_addr serv_addr;	/* the ipv4 server address           */
+	char filename[BUFFER_SIZE];	/* the filename to be transferred    */
+	unsigned int seed;			/* Random generator seed value       */
+	double loss;				/* Probability of datagram loss      */
+	unsigned int mean;			/* Mean of exp. dist. in millisecond */
 } Config;
 
 /**

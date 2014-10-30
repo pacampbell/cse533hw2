@@ -6,7 +6,7 @@
 #include "debug.h"
 #define PROCESSES_BUFFER 256
 
-/** 
+/**
  * Hold information about the child process
  * that was forked off.
  */
