@@ -392,7 +392,7 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 		// Populate the send buffer
 		while(!eof && win_count(&swin) < win_send_limit(&swin)) {
 			warn("Send limit: %d\n", win_send_limit(&swin));
-			// TODO: Check case when cwin < count
+			// TODO: Check case when cwnd < count
 			if((ret = win_buffer_elem(&swin, fd)) == -1) {
 				/* critical error */
 				goto clean_up;
@@ -444,6 +444,9 @@ send_elem:
 			/* Decrement inflight packet count since ack was valid */
 			ret = win_remove_ack(&swin, &ack);
 			swin.in_flight -= ret;
+			/* TODO: Fix this HACK? When timeout occurs in_flight = 0 but stuff in Window*/
+			if(swin.in_flight < 0)
+				swin.in_flight = 0;
 			/* Update cwnd */
 			if(swin.cwnd < swin.ssthresh) {
 				if(swin.cwnd + ret < swin.ssthresh) {
@@ -451,9 +454,10 @@ send_elem:
 				} else {
 					swin.cwnd = swin.ssthresh;
 				}
+				warn("Updated cwnd to %hu\n", swin.cwnd);
 			} else {
 				// TODO: Fix Congestion avoidence increment
-				warn("Congestion avoidence - %hu\n", swin.cwnd);
+				warn("Congestion avoidence cwnd: %hu\n", swin.cwnd);
 				swin.cwnd += swin.ssthresh * (swin.ssthresh / swin.cwnd);
 			}
 

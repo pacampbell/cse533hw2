@@ -349,7 +349,7 @@ int win_dup_ack(Window *win,  struct stcp_pkt *pkt);
  *
  * @param win  The sending window
  * @param ack_pkt  The pkt which is a valid ACK packet
- * @return The count of Elements removes
+ * @return The count of Elements removed
  */
 int win_remove_ack(Window *win,  struct stcp_pkt *ack_pkt);
 

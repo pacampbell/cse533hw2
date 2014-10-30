@@ -692,11 +692,11 @@ int win_buffer_elem(Window *win, int fd) {
 	if((rlen = read(fd, buffer, sizeof(buffer))) > 0) {
 		/* build the elem to go in the window */
 		build_pkt(&newelem.pkt, win->next_seq, 0, 0, 0, buffer, rlen);
-		debug("Read %d bytes. Built data Element.\n", rlen);
+		debug("Read %d bytes. Built data Element with seq: %u.\n", rlen, win->next_seq);
 	} else if(rlen == 0) {
 		/* Read the end of the file, build the FIN packet */
 		build_pkt(&newelem.pkt, win->next_seq, 0, 0, STCP_FIN, NULL, 0);
-		debug("Read EOF. Built FIN Element.\n");
+		debug("Read EOF. Built FIN Element with seq: %u.\n",  win->next_seq);
 	} else {
 		/* Error */
 		error("Fatal error when reading from file: %s\n", strerror(errno));
