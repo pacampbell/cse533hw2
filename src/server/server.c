@@ -177,7 +177,8 @@ int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 			break;
 		case 0:
 			/* In child */
-			info("Server Child - PID: %d\n", (int)getpid());
+			process->pid = getpid();
+			info("Server Child - PID: %d\n", process->pid);
 			/* Close unneeded parent FD */
 			interface = interfaces;
 			while(interface != NULL) {
@@ -191,18 +192,17 @@ int spawnchild(Interface *interfaces, Process *process, struct stcp_pkt *pkt) {
 				interface = interface->next;
 			}
 			childprocess(process, pkt);
-			info("Child process has finished; pid = %d\n", (int)getpid());
+			info("Child process has finished; pid = %d\n", process->pid);
 			/* Clean up memory */
-			debug("Freeing interfaces list - %d.\n", (int)getpid());
+			debug("Freeing interfaces list - %d.\n", process->pid);
 			destroy_interfaces(&interfaces);
 			/* Free up any process information that is left over */
-			debug("Freeing processes list - %d.\n", (int)getpid());
+			debug("Freeing processes list - %d.\n", process->pid);
 			destroy_processes(&processes);
 			// Quit the child
 			exit(EXIT_SUCCESS);
 			break;
 		default:
-			/* TODO: ADD HERE */
 			/* In parent */
 			process->pid = pid;
 			info("Main Server - Child PID: %d\n", pid);
@@ -298,7 +298,10 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 				} else if(select_result == -1) {
 					error("Select failed with error: %s\n", strerror(errno));
 				} else if (FD_ISSET(sock, &handshake_set)) {
-					len = recv_pkt(sock, &ack, 0);
+					if((len = recv_pkt(sock, &ack, 0)) < 0) {
+						error("Fatal error on recv: %s\n", strerror(errno));
+						goto clean_up;
+					}
 					valid_ack = server_valid_ack(len, &ack);
 					if(!valid_ack) {
 						timeout_attempts++;
@@ -318,7 +321,7 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 				}
 			} while(!valid_ack && timeout_attempts < MAX_TIMEOUT_ATTEMPTS);
 
-			// Check to make sure we didnt have too many handshake attempts
+			// Check to make sure we didn't have too many handshake attempts
 			if(timeout_attempts >= MAX_TIMEOUT_ATTEMPTS) {
 				error("Unable to complete three-way handshake on SYN_ACK step.\n");
 				goto clean_up;
@@ -331,7 +334,13 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 
 			/* Connection established start sending file */
 			/* TODO: Must mask SIGALRM during read and make sure it is in the Window */
-			transfer_file(sock, fd, process->interface_win_size, init_seq + 1, rwin_adv);
+			if(transfer_file(sock, fd, process->interface_win_size, init_seq + 1, rwin_adv)) {
+				success("Child Server %u transfered '%s' to %s:%u\n",
+					process->pid, file, process->ip_address, process->port);
+			} else {
+				error("Child Server %u failed to transfer '%s' to %s:%u\n",
+					process->pid, file, process->ip_address, process->port);
+			}
 		} else {
 			error("Failed to create a socket.\n");
 		}
@@ -384,8 +393,10 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 		while(!eof && win_count(&swin) < win_send_limit(&swin)) {
 			warn("Send limit: %d\n", win_send_limit(&swin));
 			// TODO: Check case when cwnd < count
-			if((ret = win_buffer_elem(&swin, fd)) == -1) {
+			if((ret = win_buffer_elem(&swin, fd)) < 0) {
 				/* critical error */
+				sending = false;
+				success = false;
 				goto clean_up;
 			} else {
 				eof = ret? false : true;
@@ -411,7 +422,7 @@ send_elem:
 					goto send_elem;
 				} else {
 					swin.in_flight++;
-					/* reset TCP deadlock so we dont send packets forever */
+					/* reset TCP deadlock so we don't send packets forever */
 					deadlock = false;
 				}
 			}
@@ -427,8 +438,11 @@ send_elem:
 				   we timeout or get a good ack. */
 				ret = recv_pkt(sock, &ack, 0);
 				/* what if we get SIGALRM here????? Race condition */
-				if(ret < 1) {
-					warn("Received a bad packet.\n");
+				if(ret < 0) {
+					error("Fatal error on recv: %s\n", strerror(errno));
+					sending = false;
+					success = false;
+					goto clean_up;
 				}
 			} while(ret == 0 || !win_valid_ack(&swin, &ack) || win_dup_ack(&swin, &ack));
 			clear_timeout();
@@ -481,6 +495,8 @@ send_elem:
 				/* if the window is empty and we deadlocked add another Elem! */
 				if(win_empty(&swin)) {
 					if((ret = win_buffer_elem(&swin, fd)) < 0) {
+						sending = false;
+						success = false;
 						goto clean_up;
 					} else {
 						eof = ret? false : true;

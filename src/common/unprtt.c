@@ -53,7 +53,7 @@ void rtt_newpack(struct rtt_info *ptr) {
 /* returns msec RTO */
 int rtt_start(struct rtt_info *ptr) {
 	return(ptr->rtt_rto);
-	/* 4return value can be used as: alarm(rtt_start(&foo)) */
+	/* return value can be used as: alarm(rtt_start(&foo)) */
 }
 
 /*

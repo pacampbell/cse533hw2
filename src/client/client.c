@@ -12,7 +12,7 @@ int main(int argc, char *argv[]) {
 	pthread_t ptid;
 	pthread_attr_t pattr;
 	int *exit_status;
-	// Init pthread attributes
+	// Initialize pthread attributes
 	if((rv = pthread_attr_init(&pattr))) {
 		errno = rv;
 		perror("main: pthread_attr_init");
@@ -74,7 +74,7 @@ int main(int argc, char *argv[]) {
 	}
 	/* Start Producing  */
 	if(runProducer(&stcp) < 0) {
-		error("Producer failed! Cancelling Consumer thread.\n");
+		error("Producer failed! Canceling Consumer thread.\n");
 		/* Cancel the Consumer thread */
 		if((rv = pthread_cancel(ptid) != 0))
 			error("pthread_cancel: %s\n", strerror(rv));
@@ -246,7 +246,7 @@ void *runConsumer(void *arg) {
 	}
 	*retval = 0;
 
-	/* Allow this thread to be cancelled at anytime */
+	/* Allow this thread to be canceled at anytime */
 	if((err = pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldtype)) != 0) {
 		error("pthread_setcanceltype: %s\n", strerror(err));
 		*retval = -1;
@@ -269,7 +269,7 @@ void *runConsumer(void *arg) {
 			*retval = -1;
 			pthread_exit(retval);
 		}
-		/* Read data that the producer has buffered inorder */
+		/* Read data that the producer has buffered in-order */
 		rv = stcp_client_read(stcp, read_buf, sizeof(read_buf), &nread);
 		/* Now we can dump data to stdout */
 		if(rv < 0) {
@@ -280,7 +280,7 @@ void *runConsumer(void *arg) {
 			/* EOF */
 			break;
 		}
-		/* Reenable cancelability */
+		/* Re-enable cancelability */
 		if((err = pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &oldstate)) != 0) {
 			error("pthread_setcanceltype: %s\n", strerror(err));
 			*retval = -1;

@@ -147,17 +147,17 @@ int stcp_connect(struct stcp_sock *stcp, struct sockaddr_in *serv_addr, char *fi
 	uint32_t start_seq = 0;
 	uint32_t reply_seq; /* this is set to the seq # in the SYN ACK reply */
 	struct stcp_pkt sent_pkt, reply_pkt, ack_pkt;
-	/* 1s timeout for connect + Select stuff */
+	/* 1 second timeout for connect + Select stuff */
 	int retries = 0, max_retries = 5, timeout = 1;
 	struct timeval tv = {1L, 0L};
-	int nfds;
 	fd_set rset;
 
-	/* init first SYN */
+	/* Initialize first SYN */
 	sendSYN = 1;
 	build_pkt(&sent_pkt, start_seq, 0, WIN_ADV(stcp->win), STCP_SYN, file, strlen(file));
 	/* attempt to connect backed by timeout */
 	while (1) {
+		int maxfd;
 		if(sendSYN) {
 			info("Sending connection request with %u second timeout\n", (uint32_t)tv.tv_sec);
 			/* send first SYN containing the filename in the data field */
@@ -172,8 +172,8 @@ int stcp_connect(struct stcp_sock *stcp, struct sockaddr_in *serv_addr, char *fi
 		}
 		FD_ZERO(&rset);
 		FD_SET(stcp->sockfd, &rset);
-		nfds = stcp->sockfd + 1;
-		if(select(nfds, &rset, NULL, NULL, &tv) < 0) {
+		maxfd = stcp->sockfd + 1;
+		if(select(maxfd, &rset, NULL, NULL, &tv) < 0) {
 			error("Select: %s", strerror(errno));
 			return -1;
 		}
@@ -198,7 +198,7 @@ int stcp_connect(struct stcp_sock *stcp, struct sockaddr_in *serv_addr, char *fi
 				/* break out out the loop */
 				break;
 			} else {
-				/* Dont't resend the SYN just wait for a valid response */
+				/* Don't resend the SYN just wait for a valid response */
 				sendSYN = 0;
 			}
 		} else {
@@ -225,7 +225,7 @@ int stcp_connect(struct stcp_sock *stcp, struct sockaddr_in *serv_addr, char *fi
 	if(udpConnect(stcp->sockfd, serv_addr) < 0) {
 		return -1;
 	}
-	/* init ACK packet */
+	/* Initialize ACK packet */
 	build_pkt(&ack_pkt, 0, stcp->win.next_seq, WIN_ADV(stcp->win), STCP_ACK, NULL, 0);
 	/* Send ACK packet to server */
 	len = send_pkt(stcp->sockfd, &ack_pkt, 0);
@@ -254,7 +254,7 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 
 	/* default return 0 (we are not done) */
 	done = 0;
-	/* Aquire mutex */
+	/* Acquire mutex */
 	if((err = pthread_mutex_lock(&stcp->mutex)) != 0) {
 		error("pthread_mutex_lock: %s\n", strerror(err));
 		return -1;
@@ -277,7 +277,7 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 		added = win_add_oor(&stcp->win, &elem);
 		flags = STCP_ACK;
 		if(added != NULL) {
-			/* init ACK packet */
+			/* Initialize ACK packet */
 			if(added->pkt.hdr.flags & STCP_FIN) {
 				info("Producer: buffered FIN, sending FIN ACK.\n");
 				flags |= STCP_FIN;
@@ -285,8 +285,6 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 				done = 1;
 			}
 		}
-
-		/* TODO update stcp->next_seq */
 		build_pkt(&ack_pkt, 0, stcp->win.next_seq, WIN_ADV(stcp->win), flags, NULL, 0);
 		/* Send ACK packet to server */
 		len = send_pkt(stcp->sockfd, &ack_pkt, 0);
@@ -311,7 +309,7 @@ int stcp_client_recv(struct stcp_sock *stcp) {
  * This is called when the client wakes up.
  */
 int stcp_client_read(struct stcp_sock *stcp, char *buf, int buflen, int *nread) {
-	int err, eof, i;
+	int err, eof;
 	Window *win = &stcp->win;
 	if(buf == NULL) {
 		error("Invalid argument buf cannot be NULL\n");
@@ -328,10 +326,10 @@ int stcp_client_read(struct stcp_sock *stcp, char *buf, int buflen, int *nread) 
 		errno = EINVAL;
 		return -1;
 	}
-	/* Intialize the number of byte copied into buf */
+	/* Initialize the number of byte copied into buf */
 	*nread = 0;
 	eof = 0;
-	/* Aquire mutex */
+	/* Acquire mutex */
 	if((err = pthread_mutex_lock(&stcp->mutex)) != 0) {
 		error("pthread_mutex_lock: %s\n", strerror(err));
 		return -1;
@@ -353,16 +351,17 @@ int stcp_client_read(struct stcp_sock *stcp, char *buf, int buflen, int *nread) 
 		}
 	}
 	if(*nread) {
-		info("Consumer: printing %d bytes of inorder data:\n", *nread);
+		int i;
+		info("Consumer: printing %d bytes of in-order data:\n", *nread);
 		/* Print out everything we copied into buf */
 		for(i = 0; i < *nread; ++i) {
 			putchar(buf[i]);
 		}
 		putchar('\n');
 		if(eof) {
-			info("Consumer: printed %d bytes of inorder data and read EOF. Ending...\n", *nread);
+			info("Consumer: printed %d bytes of in-order data and read EOF. Ending...\n", *nread);
 		} else {
-			info("Consumer: printed %d bytes of inorder data.\n", *nread);
+			info("Consumer: printed %d bytes of in-order data.\n", *nread);
 		}
 	} else if(eof) {
 		/* We read the last packet and no other data */
@@ -381,7 +380,7 @@ int stcp_client_read(struct stcp_sock *stcp, char *buf, int buflen, int *nread) 
 
 
 void client_set_loss(unsigned int seed, double loss) {
-	/* set the loss threshhold value for Sending AND receiving */
+	/* set the loss threshold value for Sending AND receiving */
 	warn("Setting send/recv drop rate to %f%%\n", loss);
 	loss_thresh = loss * RAND_MAX;
 	/* set seed for RNG */
@@ -523,9 +522,7 @@ int win_count(Window *win) {
 }
 
 int win_available(Window *win) {
-	/* Number of empty elems in the buffer */
-	//error("win->size %hu, win->count %hu, diff: %hu diff int: %d\n",win->size,
-	//	win->count, win->size - win->count, (int)(win->size - win->count));
+	/* Number of empty elements in the buffer */
 	return (win->size - win->count);
 }
 
@@ -588,16 +585,6 @@ Elem *win_oldest(Window *win) {
 	}
 	return oldest;
 }
-
-// Elem *win_newest(Window *win) {
-// 	Elem *newest = NULL;
-// 	if(win_empty(win)) {
-// 		debug("Tried to get an elem when the Window was empty!\n");
-// 	} else {
-// 		newest = &win->buf[win->end];
-// 	}
-// 	return newest;
-// }
 
 Elem *win_end(Window *win) {
 	return &win->buf[win->end];
@@ -735,10 +722,6 @@ int win_valid_ack(Window *win, struct stcp_pkt *pkt) {
 			} else {
 				valid = ack >= win->next_ack || ack <= win->next_seq;
 			}
-		}
-		/* TODO: should hanlding FIN ACK be put here? */
-		if(pkt->hdr.flags & STCP_FIN) {
-			valid = 1;
 		}
 	}
 	return valid;

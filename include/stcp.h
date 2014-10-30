@@ -48,7 +48,6 @@ typedef struct {
 	struct stcp_pkt pkt;	/* Packet to buffer */
 	/* stuff only for sending window element */
 	/* TODO: add rtt_info and other stuff */
-	int ack_count;		/* NUmber of ACK received with this seq #, for fast retransimit */
 } Elem;
 
 /* STCP sliding window */
@@ -62,12 +61,12 @@ typedef struct {
 	uint32_t next_seq;	/* For RWIN: Sequence # we expect to recv next */
 						/* For SWIN: Sequence # we expect to buffer next */
 	/* stuff specifically for sending window */
-	uint32_t next_ack;	/* Acknowledgement Number we expect to recv next */
+	uint32_t next_ack;	/* Acknowledgment Number we expect to recv next */
 	/* For Sending */
 	int in_flight;
-	uint16_t rwin_adv;	/* Last seen window size from a reciever ACK */
+	uint16_t rwin_adv;	/* Last seen window size from a receiver ACK */
 	uint16_t cwnd;		/* Congestion window value */
-	uint16_t ssthresh;	/* Slow Start Threshhold */
+	uint16_t ssthresh;	/* Slow Start Threshold */
 	int dup_ack;		/* Duplicate ACK count for fast retransmit */
 	// TODO: other shit for sending
 } Window;
