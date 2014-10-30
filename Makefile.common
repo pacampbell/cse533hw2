@@ -2,10 +2,11 @@
 CC = gcc
 
 # Check for colors
-COLOR_CHECK = $(shell tput -T${TERM} colors)
+# COLOR_CHECK = $(shell tput -T${TERM} colors)
+# -DCOLOR=$(COLOR_CHECK)
 
 # Set the C flags to be used by the compiler
-CFLAGS = -g -Wall -Werror -std=gnu89 -DCOLOR=$(COLOR_CHECK)
+CFLAGS = -g -Wall -Werror -std=gnu89 -DCOLOR
 IINC = -Iinclude
 LIBS = -lm -lpthread
 
