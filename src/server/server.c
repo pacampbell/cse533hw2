@@ -18,23 +18,13 @@ int main(int argc, char *argv[]) {
 			/* Setup some basic signals */
 			struct sigaction sigac_child;
 			struct sigaction sigac_alarm;
-			sigset_t child_handler_mask;
-			sigset_t alarm_handler_mask;
-
-			sigemptyset (&child_handler_mask);
-			sigemptyset (&alarm_handler_mask);
-			/* Block other terminal-generated signals while handler runs. */
-			sigaddset (&child_handler_mask, SIGALRM);
-			sigaddset (&alarm_handler_mask, SIGCHLD);
 			/* Zero out memory */
 			memset(&sigac_child, '\0', sizeof(sigac_child));
 			memset(&sigac_alarm, '\0', sizeof(sigac_alarm));
 			/* Set values */
 			sigac_child.sa_sigaction = &sigchld_handler;
-			sigac_child.sa_mask = child_handler_mask;
 			sigac_child.sa_flags = SA_SIGINFO;
 			sigac_alarm.sa_sigaction = &sigalrm_timeout;
-			sigac_alarm.sa_mask = alarm_handler_mask;
 			sigac_alarm.sa_flags = SA_SIGINFO;
 			/* Set the sigactions */
 			if(sigaction(SIGCHLD, &sigac_child, NULL) < 0) {
