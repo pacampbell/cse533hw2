@@ -195,17 +195,17 @@ int runProducer(struct stcp_sock *stcp) {
 	/* select stuff */
 	struct timeval tv;
 	long timeout = 30; /* lets use a 30 second timeout */
-	int nfds;
 	fd_set rset;
 
 	/* Set the timeout */
 	while(1) {
+		int maxfd;
 		tv.tv_sec = timeout;
 		tv.tv_usec = 0;
 		FD_ZERO(&rset);
 		FD_SET(stcp->sockfd, &rset);
-		nfds = stcp->sockfd + 1;
-		if (select(nfds, &rset, NULL, NULL, &tv) < 0) {
+		maxfd = stcp->sockfd + 1;
+		if (select(maxfd, &rset, NULL, NULL, &tv) < 0) {
 			perror("stcp_connect: select");
 			return -1;
 		}
@@ -234,8 +234,7 @@ int runProducer(struct stcp_sock *stcp) {
 void *runConsumer(void *arg) {
 	struct consumer_args *args = arg;
     struct stcp_sock *stcp = args->stcp;
-	unsigned int ms;
-	int err, oldtype, oldstate, rv;
+	int err, oldtype, oldstate;
 	int *retval;
 	char read_buf[STCP_MAX_DATA * stcp->win.size];
 	int nread;
@@ -256,7 +255,10 @@ void *runConsumer(void *arg) {
 	/* set the seed for our uniform uniformly distributed RNG */
 	srand48(args->seed);
 	while(1) {
-		ms = sampleExpDist(args->mean);
+		int rv;
+		unsigned int ms;
+		/* Sample from uniformly distributed RNG with mean from config */
+		ms = args->mean * (-1 * log(drand48()));
 		debug("Consumer: sleeping for %u ms\n", ms);
 		if(usleep(ms * 1000) < 0) {
 			perror("runConsumer: usleep");
@@ -286,11 +288,4 @@ void *runConsumer(void *arg) {
 		}
 	}
 	pthread_exit(retval);
-}
-
-
-unsigned int sampleExpDist(unsigned int mean) {
-	unsigned int usecs;
-	usecs = mean * (-1 * log(drand48()));
-	return usecs;
 }

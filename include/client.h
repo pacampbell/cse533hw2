@@ -52,15 +52,6 @@ int runProducer(struct stcp_sock *sock);
  */
 void *runConsumer(void *args);
 
-/**
-* Return a sleep time by sampling from a uniform dist. RNG with mean
-* using drand48
-*
-* @param mean The mean of the uniform distribution
-* @return A time in milliseconds to sleep
-*/
-unsigned int sampleExpDist(unsigned int mean);
-
 int bitsSet(unsigned long mask);
 
 #endif

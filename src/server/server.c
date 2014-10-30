@@ -105,7 +105,9 @@ void run(Interface *interfaces, Config *config) {
 				debug("Detected connection on interface: <%s> %s\n", node->name, node->ip_address);
 				valid_pkt = recvfrom_pkt(node->sockfd, &pkt, 0, (struct sockaddr *)&connection_addr, &connection_len);
 				if(valid_pkt < 0) {
-					error("Error on recvfrom: %s\n", strerror(errno));
+					if(errno != EINTR) {
+						error("Error on recvfrom: %s\n", strerror(errno));
+					}
 					node = node->next;
 					continue;
 				}
