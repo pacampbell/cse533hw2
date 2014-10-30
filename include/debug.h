@@ -17,11 +17,13 @@
 	#define error(S, ...) do{fprintf(stderr, KRED "ERROR: %s:%s:%d " S KNRM, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);} while(0)
 	#define warn(S, ...) do{fprintf(stderr, KYEL "WARN: %s:%s:%d " S KNRM, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);} while(0)
 	#define info(S, ...) do{fprintf(stdout, KCYN "INFO: %s:%s:%d " S KNRM, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);} while(0)
+	#define success(S, ...) do{fprintf(stdout, KGRN "SUCCESS: %s:%s:%d " S KNRM, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);} while(0)
 #else
 	#define debug(S, ...)
 	#define error(S, ...) do{fprintf(stderr, KRED "ERROR: " S KNRM, ##__VA_ARGS__);} while(0)
 	#define warn(S, ...) do{fprintf(stderr, KYEL "WARN: " S KNRM, ##__VA_ARGS__);} while(0)
 	#define info(S, ...) do{fprintf(stdout, KCYN "INFO: " S KNRM, ##__VA_ARGS__);} while(0)
+	#define success(S, ...) do{fprintf(stdout, KGRN "SUCCESS: %s:%s:%d " S KNRM, ##__VA_ARGS__);} while(0)
 #endif
 
 #endif
