@@ -429,7 +429,7 @@ send_elem:
 				}
 			}
 			/* TODO: Make this timeout vary */
-			set_timeout(5, 0);
+			set_timeout(3, 0);
 			/* receive packet */
 			do {
 				if(swin.dup_ack == STCP_FAST_RETRANSMIT) {
