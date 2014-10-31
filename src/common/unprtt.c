@@ -30,7 +30,6 @@ void rtt_init(struct rtt_info *ptr) {
 	ptr->rtt_rto = rtt_minmax(RTT_RTOCALC(ptr));
 		/* first RTO at (srtt + (4 * rttvar)) = 3 seconds */
 }
-/* end rtt1 */
 
 /*
  * Return the current timestamp.

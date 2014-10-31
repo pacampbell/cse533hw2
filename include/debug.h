@@ -26,17 +26,17 @@
 #endif
 
 #ifdef DEBUG
-	#define debug(S, ...) do{fprintf(stdout, KBLU "DEBUG: %s:%s:%d " S KNRM, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);} while(0)
-	#define error(S, ...) do{fprintf(stderr, KRED "ERROR: %s:%s:%d " S KNRM, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);} while(0)
-	#define warn(S, ...) do{fprintf(stderr, KYEL "WARN: %s:%s:%d " S KNRM, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);} while(0)
-	#define info(S, ...) do{fprintf(stdout, KCYN "INFO: %s:%s:%d " S KNRM, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);} while(0)
-	#define success(S, ...) do{fprintf(stdout, KGRN "SUCCESS: %s:%s:%d " S KNRM, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);} while(0)
+	#define debug(S, ...)   fprintf(stdout, KBLU "DEBUG: %s:%s:%d " S KNRM, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);
+	#define error(S, ...)   fprintf(stderr, KRED "ERROR: %s:%s:%d " S KNRM, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);
+	#define warn(S, ...)    fprintf(stderr, KYEL "WARN: %s:%s:%d " S KNRM, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);
+	#define info(S, ...)    fprintf(stdout, KCYN "INFO: %s:%s:%d " S KNRM, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);
+	#define success(S, ...) fprintf(stdout, KGRN "SUCCESS: %s:%s:%d " S KNRM, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);
 #else
 	#define debug(S, ...)
-	#define error(S, ...) do{fprintf(stderr, KRED "ERROR: " S KNRM, ##__VA_ARGS__);} while(0)
-	#define warn(S, ...) do{fprintf(stderr, KYEL "WARN: " S KNRM, ##__VA_ARGS__);} while(0)
-	#define info(S, ...) do{fprintf(stdout, KCYN "INFO: " S KNRM, ##__VA_ARGS__);} while(0)
-	#define success(S, ...) do{fprintf(stdout, KGRN "SUCCESS: " S KNRM, ##__VA_ARGS__);} while(0)
+	#define error(S, ...)   fprintf(stderr, KRED "ERROR: " S KNRM, ##__VA_ARGS__);
+	#define warn(S, ...)    fprintf(stderr, KYEL "WARN: " S KNRM, ##__VA_ARGS__);
+	#define info(S, ...)    fprintf(stdout, KCYN "INFO: " S KNRM, ##__VA_ARGS__);
+	#define success(S, ...) fprintf(stdout, KGRN "SUCCESS: " S KNRM, ##__VA_ARGS__);
 #endif
 
 #endif

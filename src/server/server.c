@@ -434,7 +434,9 @@ send_elem:
 			do {
 				if(swin.dup_ack == STCP_FAST_RETRANSMIT) {
 					/* Do Fast Retransmit */
-					warn("Fast Retransmit not implemented!\n");
+					clear_timeout();
+					swin.dup_ack = 0;
+					warn("3 Duplicate ACKs entering Fast Retransmit\n");
 					if(swin.cwnd > 1){
 						swin.cwnd = swin.cwnd/2;
 					}
@@ -452,6 +454,10 @@ send_elem:
 					success = false;
 					goto clean_up;
 				}
+				/* It doesn't matter if we get a SIGALRAM during this while
+				 * loop because these functions don't update critical
+				 * information in the sending window.
+				 */
 			} while(ret == 0 || !win_valid_ack(&swin, &ack) || win_dup_ack(&swin, &ack));
 			clear_timeout();
 
