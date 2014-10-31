@@ -13,9 +13,8 @@ int main(int argc, char *argv[]) {
 	pthread_attr_t pattr;
 	int *exit_status;
 	// Initialize pthread attributes
-	if((rv = pthread_attr_init(&pattr))) {
-		errno = rv;
-		perror("main: pthread_attr_init");
+	if((rv = pthread_attr_init(&pattr)) != 0) {
+		error("pthread_attr_init: %s\n", strerror(rv));
 		exit(EXIT_FAILURE);
 	}
 
@@ -68,13 +67,13 @@ int main(int argc, char *argv[]) {
 	args.stcp = &stcp;
 	args.seed = config.seed;
 	args.mean = config.mean;
-	if((rv = pthread_create(&ptid, &pattr, runConsumer, &args) != 0)) {
+	if((rv = pthread_create(&ptid, &pattr, runConsumer, &args)) != 0) {
 		error("pthread_create: %s\n", strerror(rv));
 		goto stcp_failure;
 	}
 	/* destroy pthread attributes */
-	if(pthread_attr_destroy(&pattr)) {
-		perror("main: pthread_attr_destroy");
+	if((rv = pthread_attr_destroy(&pattr)) != 0) {
+		error("pthread_attr_destroy: %s\n", strerror(rv));
 		goto stcp_failure;
 	}
 	/* Start Producing  */
@@ -82,7 +81,7 @@ int main(int argc, char *argv[]) {
 		error("Producer: failed to buffer entire file '%s' from %s:%u\n",
 			config.filename,inet_ntoa(serv_addr.sin_addr),serv_addr.sin_port);
 		/* Cancel the Consumer thread */
-		if((rv = pthread_cancel(ptid) != 0)){
+		if((rv = pthread_cancel(ptid)) != 0){
 			error("pthread_cancel: %s\n", strerror(rv));
 		}
 		err = 1;
@@ -93,23 +92,22 @@ int main(int argc, char *argv[]) {
 	info("Waiting on consumer thread...\n");
 	/* wait for the consumer to finish reading all the data */
 	if((rv = pthread_join(ptid, (void **)&exit_status)) < 0) {
-		errno = rv;
-		perror("main: pthread_join");
+		error("pthread_join: %s\n", strerror(rv));
 		goto stcp_failure;
 	}
-	if(*exit_status == 1) {
-		success("Consumer: read entire file from receiving window.\n");
-	} else {
+	if(exit_status == NULL) {
 		/* Consumer thread failed */
-		error("Consumer: failed to read entire file from receiving window.\n");
-		free(exit_status);
+		error("Consumer: failed to read file from window.\n");
 		goto stcp_failure;
+	} else {
+		success("Consumer: read %d byte file '%s' from window.\n",
+				*exit_status, config.filename);
 	}
 	/* free thread's return status */
 	free(exit_status);
 	/* close the STCP socket */
 	if(stcp_close(&stcp) < 0) {
-		perror("main: stcp_close");
+		error("stcp_close: %s\n", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
 	if(err)
@@ -203,7 +201,7 @@ int runProducer(struct stcp_sock *stcp) {
 	int done;
 	/* select stuff */
 	struct timeval tv;
-	long timeout = 30; /* lets use a 30 second timeout */
+	long timeout = 75; /* lets use a 75 second timeout */
 	fd_set rset;
 
 	/* Set the timeout */
@@ -215,7 +213,7 @@ int runProducer(struct stcp_sock *stcp) {
 		FD_SET(stcp->sockfd, &rset);
 		maxfd = stcp->sockfd + 1;
 		if (select(maxfd, &rset, NULL, NULL, &tv) < 0) {
-			perror("stcp_connect: select");
+			error("Producer failed on select: %s\n", strerror(errno));
 			return -1;
 		}
 		if (FD_ISSET(stcp->sockfd, &rset)) {
@@ -228,10 +226,12 @@ int runProducer(struct stcp_sock *stcp) {
 				break;
 			}
 		} else {
-			/* 30 second timeout reached on select and socket was not readable.
+			/* 75 second timeout reached on select and socket was not readable.
 			 * If this happens we assume the server crashed or the network is down.
 			 * TODO: Ask Badr about this case. He said we should only have one
-			 *       timeout on the client side, but it seems silly to hang forever.
+			 * timeout on the client side, but it seems silly to hang forever.
+			 * And the max RTO on the server is 3 seconds with a max retransmit
+			 * attempt of 12 so we could lower this to anything >36 seconds.
 			 */
 			error("Producer timed out after %ld seconds without receiving data\n", timeout);
 			return -1;
@@ -244,22 +244,21 @@ void *runConsumer(void *arg) {
 	struct consumer_args *args = arg;
     struct stcp_sock *stcp = args->stcp;
 	int err, oldtype, oldstate;
-	int *retval;
+	int *total_bytes;
 	char read_buf[STCP_MAX_DATA * stcp->win.size];
 	int nread;
 
 	/* allocate space for our exit status */
-	if((retval = malloc(sizeof(int))) == NULL) {
+	if((total_bytes = malloc(sizeof(int))) == NULL) {
 		error("Consumer: malloc failed\n");
 		pthread_exit(NULL);
 	}
-	*retval = 0;
+	*total_bytes = 0;
 
 	/* Allow this thread to be canceled at anytime */
 	if((err = pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldtype)) != 0) {
 		error("pthread_setcanceltype: %s\n", strerror(err));
-		*retval = -1;
-		pthread_exit(retval);
+		pthread_exit(NULL);
 	}
 	/* set the seed for our uniform uniformly distributed RNG */
 	srand48(args->seed);
@@ -270,32 +269,30 @@ void *runConsumer(void *arg) {
 		ms = args->mean * (-1 * log(drand48()));
 		debug("Consumer: sleeping for %u ms\n", ms);
 		if(usleep(ms * 1000) < 0) {
-			perror("runConsumer: usleep");
+			error("Consumer usleep: %s\n", strerror(errno));
 		}
 		/* Wake up and read from buffer. We do not want to be canceled here. */
 		if((err = pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate)) != 0) {
 			error("pthread_setcanceltype: %s\n", strerror(err));
-			*retval = -1;
-			pthread_exit(retval);
+			pthread_exit(NULL);
 		}
 		/* Read data that the producer has buffered in-order */
 		rv = stcp_client_read(stcp, read_buf, sizeof(read_buf), &nread);
-		/* Now we can dump data to stdout */
 		if(rv < 0) {
 			/* some kind of error */
-			*retval = -1;
-			pthread_exit(retval);
+			pthread_exit(NULL);
 		} else if(rv == 0) {
 			/* Consumer read EOF */
-			*retval = 1;
+			*total_bytes += nread;
 			break;
 		}
+		/* Increment the total # of bytes read */
+		*total_bytes += nread;
 		/* Re-enable cancelability */
 		if((err = pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &oldstate)) != 0) {
 			error("pthread_setcanceltype: %s\n", strerror(err));
-			*retval = -1;
-			pthread_exit(retval);
+			pthread_exit(NULL);
 		}
 	}
-	pthread_exit(retval);
+	pthread_exit(total_bytes);
 }
