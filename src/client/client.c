@@ -228,6 +228,7 @@ int runProducer(struct stcp_sock *stcp) {
 		}
 		if (FD_ISSET(stcp->sockfd, &rset)) {
 			done = stcp_client_recv(stcp, &bbytes);
+			win_print(&stcp->win);
 			total_bytes += bbytes;
 			if(done < 0) {
 				/* some kind of error */

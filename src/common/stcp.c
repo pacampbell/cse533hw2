@@ -399,12 +399,12 @@ int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 int send_pkt(int sockfd, struct stcp_pkt *pkt, int flags) {
 	int rv;
 	/* DROP */
-	// if(rand() < loss_thresh) {
-	// 	warn("Dropped on send ");
-	// 	print_hdr(&pkt->hdr);
-	// 	/* return as if we succeeded */
-	// 	return sizeof(struct stcp_hdr) + pkt->dlen;
-	// }
+	if(rand() < loss_thresh) {
+		warn("Dropped on send ");
+		print_hdr(&pkt->hdr);
+		/* return as if we succeeded */
+		return sizeof(struct stcp_hdr) + pkt->dlen;
+	}
 #ifdef DEBUG
 	debug("Sending pkt: ");
 	print_hdr(&pkt->hdr);
@@ -479,6 +479,19 @@ int recv_pkt(int sockfd, struct stcp_pkt *pkt, int flags) {
 /*
  * Start Circle Buffer Functions
  */
+void win_print(Window *win) {
+	int i;
+	for(i = 0; i < win->size; ++i) {
+		Elem *elem =  &win->buf[i];
+		if(elem->valid) {
+			printf("| %u ", elem->pkt.hdr.seq);
+		} else {
+			printf("| _ ");
+		}
+	}
+	printf("|\n");
+}
+
 int win_init(Window *win, int win_size, uint32_t initial_seq) {
 	memset(win, 0, sizeof(Window));
 	/* sliding window size */
@@ -588,7 +601,11 @@ void win_clear(Window *win) {
 /**
  * Functions only for receiver side
  */
-
+/* TODO: BROKEN
+DEBUG: src/common/stcp.c:recv_pkt:472 Received pkt: seq:12, ack:0, win:0, flags:
+DEBUG: src/common/stcp.c:send_pkt:409 Sending pkt: seq:0, ack:14, win:21, flags: ACK
+| _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | 15 | 12 | _ | 18 | _ | _ | _ |
+*/
 int win_add_oor(Window *win, Elem *elem, int *bbytes) {
 	uint32_t seq = elem->pkt.hdr.seq;
 	uint32_t fwdoff; /* fwd offset of elem seq */

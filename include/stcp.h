@@ -197,6 +197,8 @@ int recvfrom_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 
 #define WIN_ADV(win) ((win).size - (win).count)
 
+void win_print(Window *win);
+
 /**
  * Allocate and initialize a sliding window
  *
