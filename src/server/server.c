@@ -648,10 +648,10 @@ int server_transmit_payload2(int socket, int seq, int ack, struct stcp_pkt *pkt,
 						   printf("------------------+\n");} while(0)
 
 #define WINDOW_ROW(v1Label, v1Value, v2Label, v2Value, v3Label, v3Value, v4Label, v4Value) do { \
-				   	 	 printf("| %-9s %-6d |", (v1Label), (v1Value)); \
-				   	 	 printf(" %-9s %-6d |", (v2Label), (v2Value)); \
-				   	 	 printf(" %-9s %-6d |", (v3Label), (v3Value)); \
-				   	 	 printf(" %-9s %-6d |\n", (v4Label), (v4Value)); \
+				   	 	 printf("| %-9s %-6u |", (v1Label), (v1Value)); \
+				   	 	 printf(" %-9s %-6u |", (v2Label), (v2Value)); \
+				   	 	 printf(" %-9s %-6u |", (v3Label), (v3Value)); \
+				   	 	 printf(" %-9s %-6u |\n", (v4Label), (v4Value)); \
 						} while(0)
 
 #define HEADER(label) do{ \
@@ -676,7 +676,7 @@ void display_window(Window *window) {
 	int i, j;
 	char pid_str[19];
 	// Convert pid to str
-	sprintf(pid_str, "PID: %d", getpid());
+	sprintf(pid_str, "PID: %u", getpid());
 	/* Print the pid Header */
 	HEADER(pid_str);
 	/* Print the window header */
@@ -717,7 +717,7 @@ void display_window(Window *window) {
 		}
 		// Print out the element information
 		if(elem->valid) {
-			PRINT_ELEM(elem->pkt.hdr.seq, "d");
+			PRINT_ELEM(elem->pkt.hdr.seq, "u");
 		} else {
 			PRINT_ELEM("_", "s");
 		}
