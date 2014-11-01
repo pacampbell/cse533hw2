@@ -247,42 +247,35 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 
 		if(sock >= 0) {
 			int len = 0;
-			uint32_t init_seq = 0;			/* This is the seq sent on the FIN ACK */
-			uint32_t rwin_adv = 0;			/* This is the win_size received on the ACK */
 			int timeout_duration = 1;
 			int timeout_attempts = 0;
 			fd_set handshake_set;
 			struct timeval tv;
 			int select_result;
 			bool valid_ack = false;
+			/* Construct the SYN ACK response */
+			uint32_t init_seq = 0;
+			uint32_t init_ack = pkt->hdr.seq + 1;
+			uint32_t rwin_adv;
+			struct stcp_pkt syn_ack;
+			build_pkt(&syn_ack, init_seq, init_ack, 0, STCP_SYN|STCP_ACK,
+						&server_addr.sin_port, sizeof(server_addr.sin_port));
 			do {
 				/* Wait for client's ACK */
 				FD_ZERO(&handshake_set);
 				FD_SET(sock, &handshake_set);
 
-				// determine which interfaces to send on
-				if(timeout_attempts == 0) {
-					// Send SYN | ACK for new socket
-					len = server_transmit_payload1(process->interface_fd, init_seq,
-						pkt->hdr.seq + 1, pkt, process, STCP_SYN | STCP_ACK,
-						&server_addr.sin_port, sizeof(server_addr.sin_port),
-						client_addr);
-				} else {
-					// We had a timeout. Send on both server interface and new socket
-					len = server_transmit_payload1(process->interface_fd, init_seq,
-						pkt->hdr.seq + 1, pkt, process, STCP_SYN | STCP_ACK,
-						&server_addr.sin_port, sizeof(server_addr.sin_port),
-						client_addr);
-					// TODO: Better error checking ?
+				/* Send SYN | ACK on the original socket */
+				len = sendto_pkt(process->interface_fd, &syn_ack, 0,
+						(struct sockaddr*)&client_addr, sizeof(client_addr));
+				if(len < 0) {
+					error("Failed to send SYN_ACK on out of band UDP socket.\n");
+				}
+				if(timeout_attempts > 0) {
+					/* Send syn_ack on the new connected socket as well */
+					len = send_pkt(sock, &syn_ack, 0);
 					if(len < 0) {
-						error("Failed to send SYN_ACK on interface server interface.\n");
-					}
-					len = server_transmit_payload2(sock, init_seq,
-						pkt->hdr.seq + 1, pkt, process, STCP_SYN | STCP_ACK,
-						&server_addr.sin_port, sizeof(server_addr.sin_port));
-					// TODO: Better error checking?
-					if(len < 0) {
-						error("Failed to send SYN_ACK on out of band UDP socket.\n");
+						error("Failed to send SYN_ACK on connected UDP socket.\n");
 					}
 				}
 
@@ -534,10 +527,9 @@ clean_up:
 
 static void sigchld_handler(int signum, siginfo_t *siginfo, void *context) {
 	int pid;
-	Process *process = NULL;
 
 	while((pid = waitpid(-1, NULL, WNOHANG)) > 0) {
-		process = get_process_by_pid(processes, pid);
+		Process *process = get_process_by_pid(processes, pid);
 		if(process != NULL) {
 			if(remove_process(&processes, process)) {
 				info("Successfully removed the process %d\n", (int)pid);
