@@ -1,7 +1,6 @@
 #include "utility.h"
 
 bool parseServerConfig(char *path, Config *config) {
-	bool success = false;
 	int fd, rlen;
 	char file[2*BUFFER_SIZE];
 	if((fd = open(path, O_RDONLY)) < 0) {
@@ -10,29 +9,40 @@ bool parseServerConfig(char *path, Config *config) {
 	}
 	/* read everything from the file */
 	if((rlen = read(fd, file, sizeof(file))) > 0) {
-		if(sscanf(file, "%hu\n%u", &config->port, &config->win_size) != 2) {
+		int win_size, port;
+		if(sscanf(file, "%d\n%d", &port, &win_size) != 2) {
 			error("Config file: failed to parse both lines. Please verify format\n");
-			success = false;
-		} else {
-			/* Success!!!! */
-			success = true;
+			goto failed;
 		}
+		/* Validate port and window size */
+		if(port <= 0 || port > 0xFFFF) {
+			error("Config file: server port must be between [1, 65536]!\n");
+			goto failed;
+		}
+		if(win_size <= 0 || win_size > 0xFFFF) {
+			error("Config file: window size must be between [1, 65536]!\n");
+			goto failed;
+		}
+		config->win_size = (unsigned int)win_size;
+		config->port = (unsigned short)port;
 	} else if(rlen < 0) {
 		error("Error reading config file: %s\n", strerror(errno));
-		success = false;
+		goto failed;
 	} else {
 		error("Config file was empty!\n");
-		success = false;
+		goto failed;
 	}
 	if(close(fd) < 0) {
 		error("Error closing config file: %s\n", strerror(errno));
 		return false;
 	}
-	return success;
+	return true;
+failed:
+	close(fd);
+	return false;
 }
 
 bool parseClientConfig(char *path, Config *config) {
-	bool success = false;
 	int fd, rlen;
 	char file[7 * 256];
 	if((fd = open(path, O_RDONLY)) < 0) {
@@ -42,33 +52,53 @@ bool parseClientConfig(char *path, Config *config) {
 	/* read everything from the file */
 	if((rlen = read(fd, file, sizeof(file))) > 0) {
 		char ipbuf[256];
-		if(sscanf(file, "%255s\n%hu\n%255s\n%u\n%d\n%lf\n%u",
-				ipbuf, &config->port, config->filename, &config->win_size,
-				&config->seed, &config->loss, &config->mean) != 7) {
+		int win_size, port, mean;
+		if(sscanf(file, "%255s\n%d\n%255s\n%d\n%d\n%lf\n%d",
+				ipbuf, &port, config->filename, &win_size,
+				&config->seed, &config->loss, &mean) != 7) {
 			error("Config file: failed to parse all 7 lines. Please verify format\n");
-			success = false;
-		} else {
-			/* convert IP to a struct in_addr */
-			if(inet_aton(ipbuf, &config->serv_addr) == 0) {
-				error("Config file: failed to parse IP '%s'\n", ipbuf);
-				success = false;
-			} else {
-				/* Success!!!! */
-				success = true;
-			}
+			goto failed;
 		}
+		/* convert IP to a struct in_addr */
+		if(inet_aton(ipbuf, &config->serv_addr) == 0) {
+			error("Config file: failed to parse IP '%s'\n", ipbuf);
+			goto failed;
+		}
+		/* Successfully parsed all 7 options, now validate */
+		if(port <= 0 || port > 0xFFFF) {
+			error("Config file: server port must be between [1, 65536]!\n");
+			goto failed;
+		}
+		if(win_size <= 0 || win_size > 0xFFFF) {
+			error("Config file: window size must be between [1, 65536]!\n");
+			goto failed;
+		}
+		if(mean <= 0) {
+			error("Config file: mean (for consumer sleep) must be positive!\n");
+			goto failed;
+		}
+		if(config->loss < 0.0 || config->loss > 1.0) {
+			error("Config file: loss rate must be between [0.0, 1.0]!\n");
+			goto failed;
+		}
+		config->win_size = (unsigned int)win_size;
+		config->port = (unsigned short)port;
+		config->mean = (unsigned int)mean;
 	} else if(rlen < 0) {
 		error("Error reading config file: %s\n", strerror(errno));
-		success = false;
+		goto failed;
 	} else {
 		error("Config file was empty!\n");
-		success = false;
+		goto failed;
 	}
 	if(close(fd) < 0) {
 		error("Error closing config file: %s\n", strerror(errno));
 		return false;
 	}
-	return success;
+	return true;
+failed:
+	close(fd);
+	return false;
 }
 
 int createServer(char *address, unsigned int port) {
