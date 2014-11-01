@@ -142,11 +142,12 @@ int stcp_connect(struct stcp_sock *stcp, struct sockaddr_in *serv_addr, char *fi
  * Recv a pkt from the server, buffer it, and send an ACK.
  *
  * @param sock A stcp_sock initialized by the client for reading.
+ * @param bbytes Will store the number of bytes of data add to the window
  * @return  -1 on error
  *			 0 if the FIN was received
  *			>0 if we are waiting for more data
  */
-int stcp_client_recv(struct stcp_sock *stcp);
+int stcp_client_recv(struct stcp_sock *stcp, int *bbytes);
 
 /*
  * Read from the Window buffer.
@@ -285,11 +286,12 @@ void win_clear(Window *win);
  * the element out of order. This function returns true if the last element
  * in the window after inserting elem is the FIN packet.
  *
- * @param win  The Window
- * @param elem The Elem to append to the window
+ * @param win    The Window
+ * @param elem   The Elem to append to the window
+ * @param bbytes Will store the number of bytes of data add to the window
  * @return True if the FIN is in the window, else false
  */
-int win_add_oor(Window *win, Elem *elem);
+int win_add_oor(Window *win, Elem *elem, int *bbytes);
 
 /**
  * Returns the elem at offset fwdoff. Or NULL if the index is too large.

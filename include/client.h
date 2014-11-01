@@ -54,4 +54,13 @@ void *runConsumer(void *args);
 
 int bitsSet(unsigned long mask);
 
+/*
+ * Stores the difference between end and start into diff. The ending time must be
+ * greater than the start time.
+ * @param start The starting time
+ * @param end   The ending time
+ * @param diff  Stores the difference between end and start
+ */
+void timeval_diff(struct timeval *start, struct timeval *end, struct timeval *diff);
+
 #endif

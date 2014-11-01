@@ -199,11 +199,21 @@ int bitsSet(unsigned long mask) {
 
 int runProducer(struct stcp_sock *stcp) {
 	int done;
+	/* Download speed statistics */
+	int bbytes, total_bytes = 0;
+	struct timeval tv_start;
+	struct timeval tv_end;
+	struct timeval tv_diff;
+	double total_sec;
 	/* select stuff */
 	struct timeval tv;
 	long timeout = 75; /* lets use a 75 second timeout */
 	fd_set rset;
-
+	/* Get a starting timestamp */
+	if(gettimeofday(&tv_start, NULL) != 0) {
+		error("Producer failed on gettimeofday: %s\n", strerror(errno));
+		return -1;
+	}
 	/* Set the timeout */
 	while(1) {
 		int maxfd;
@@ -217,7 +227,8 @@ int runProducer(struct stcp_sock *stcp) {
 			return -1;
 		}
 		if (FD_ISSET(stcp->sockfd, &rset)) {
-			done = stcp_client_recv(stcp);
+			done = stcp_client_recv(stcp, &bbytes);
+			total_bytes += bbytes;
 			if(done < 0) {
 				/* some kind of error */
 				return -1;
@@ -237,6 +248,15 @@ int runProducer(struct stcp_sock *stcp) {
 			return -1;
 		}
 	}
+	/* Get an ending timestamp */
+	if(gettimeofday(&tv_end, NULL) != 0) {
+		error("Producer failed on gettimeofday: %s\n", strerror(errno));
+		return -1;
+	}
+	timeval_diff(&tv_start, &tv_end, &tv_diff);
+	total_sec = (double)tv_diff.tv_sec + (double)tv_diff.tv_usec/1000000.0;
+	success("Producer buffered %d byte file after %f sec\n", total_bytes, total_sec);
+	success("Average download speed %f kB/s\n", ((double)total_bytes/1000.0)/total_sec);
 	return 0;
 }
 
@@ -295,4 +315,16 @@ void *runConsumer(void *arg) {
 		}
 	}
 	pthread_exit(total_bytes);
+}
+
+void timeval_diff(struct timeval *start, struct timeval *end, struct timeval *diff) {
+	if(end->tv_usec > start->tv_usec) {
+		/* subtract normally */
+		diff->tv_sec = end->tv_sec - start->tv_sec;
+		diff->tv_usec = end->tv_usec - start->tv_usec;
+	} else {
+		/* Carry from seconds to subtract */
+		diff->tv_sec = end->tv_sec - start->tv_sec - 1;
+		diff->tv_usec = 1000000L - (start->tv_usec - end->tv_usec);
+	}
 }

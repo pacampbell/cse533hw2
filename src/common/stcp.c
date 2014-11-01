@@ -243,7 +243,7 @@ int stcp_connect(struct stcp_sock *stcp, struct sockaddr_in *serv_addr, char *fi
  * 2. If seq == expected, buffer P and send cumulative ACK
  * 3. If seq > expected, buffer(if space is avail) P and send duplicate ACK
  */
-int stcp_client_recv(struct stcp_sock *stcp) {
+int stcp_client_recv(struct stcp_sock *stcp, int *bbytes) {
 	int len, err, done;
 	struct stcp_pkt ack_pkt;
 	uint16_t flags;
@@ -251,6 +251,7 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 
 	/* default return 0 (we are not done) */
 	done = 0;
+	*bbytes = 0;
 	/* Acquire mutex */
 	if((err = pthread_mutex_lock(&stcp->mutex)) != 0) {
 		error("pthread_mutex_lock: %s\n", strerror(err));
@@ -267,7 +268,7 @@ int stcp_client_recv(struct stcp_sock *stcp) {
 		done = 0;
 	} else {
 		/* Add the (potentially out-of-order) data packet */
-		done = win_add_oor(&stcp->win, &elem);
+		done = win_add_oor(&stcp->win, &elem, bbytes);
 		flags = STCP_ACK;
 		if(done) {
 			info("Producer: buffered FIN, sending FIN ACK.\n");
@@ -398,12 +399,12 @@ int sendto_pkt(int sockfd, struct stcp_pkt *pkt, int flags,
 int send_pkt(int sockfd, struct stcp_pkt *pkt, int flags) {
 	int rv;
 	/* DROP */
-	if(rand() < loss_thresh) {
-		warn("Dropped on send ");
-		print_hdr(&pkt->hdr);
-		/* return as if we succeeded */
-		return sizeof(struct stcp_hdr) + pkt->dlen;
-	}
+	// if(rand() < loss_thresh) {
+	// 	warn("Dropped on send ");
+	// 	print_hdr(&pkt->hdr);
+	// 	/* return as if we succeeded */
+	// 	return sizeof(struct stcp_hdr) + pkt->dlen;
+	// }
 #ifdef DEBUG
 	debug("Sending pkt: ");
 	print_hdr(&pkt->hdr);
@@ -588,11 +589,11 @@ void win_clear(Window *win) {
  * Functions only for receiver side
  */
 
-int win_add_oor(Window *win, Elem *elem) {
+int win_add_oor(Window *win, Elem *elem, int *bbytes) {
 	uint32_t seq = elem->pkt.hdr.seq;
 	uint32_t fwdoff; /* fwd offset of elem seq */
 	Elem *new_end = NULL;
-
+	*bbytes = 0;
 	if(seq < win->next_seq) {
 		fwdoff = win->next_seq - seq;
 	} else {
@@ -600,32 +601,36 @@ int win_add_oor(Window *win, Elem *elem) {
 	}
 
 	/* see it we can fit this offset */
-	if(fwdoff == 0) {
-		Elem *temp;
-		/* we can just use regular add */
-		new_end = win_add(win, elem);
-		/* Advance past already buffered data */
-		temp = win_end(win);
-		while((temp->valid) && (temp->pkt.hdr.seq == win->next_seq)) {
-			debug("Added missing seq: %u, moving window end to send cumulative ACK\n",
-					win->next_seq - 1);
-			/* Advance the end index and increment our elem count */
-			new_end = temp;
-			win->count += 1;
-			win->end = (win->end + 1) % win->size;
-			win->next_seq += 1;
+	if(fwdoff < win_available(win)) {
+		if(fwdoff == 0) {
+			Elem *temp;
+			/* elem is the next expected seq we can just use regular add */
+			new_end = win_add(win, elem);
+			*bbytes += elem->pkt.dlen;
+			/* Advance past already buffered data */
 			temp = win_end(win);
-		}
-
-	} else if(fwdoff < win_available(win)) {
-		Elem *oor_elem;
-
-		oor_elem = win_get(win, fwdoff);
-		if(oor_elem->valid) {
-			debug("Recv window already buffered seq: %u\n", seq);
+			while((temp->valid) && (temp->pkt.hdr.seq == win->next_seq)) {
+				debug("Added missing seq: %u, moving window end to send cumulative ACK\n",
+						win->next_seq - 1);
+				/* increment the num bytes added to window */
+				*bbytes += temp->pkt.dlen;
+				/* Advance the end index and increment our elem count */
+				new_end = temp;
+				win->count += 1;
+				win->end = (win->end + 1) % win->size;
+				win->next_seq += 1;
+				temp = win_end(win);
+			}
 		} else {
-			memcpy(oor_elem, elem, sizeof(Elem));
-			oor_elem->valid = 1;
+			Elem *oor_elem;
+			/* try to buffer this out of order packet */
+			oor_elem = win_get(win, fwdoff);
+			if(oor_elem->valid) {
+				debug("Recv window already buffered seq: %u\n", seq);
+			} else {
+				memcpy(oor_elem, elem, sizeof(Elem));
+				oor_elem->valid = 1;
+			}
 		}
 	} else {
 		/* no room in buffer */
