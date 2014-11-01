@@ -608,17 +608,15 @@ DEBUG: src/common/stcp.c:send_pkt:409 Sending pkt: seq:0, ack:14, win:21, flags:
 */
 int win_add_oor(Window *win, Elem *elem, int *bbytes) {
 	uint32_t seq = elem->pkt.hdr.seq;
-	uint32_t fwdoff; /* fwd offset of elem seq */
 	Elem *new_end = NULL;
 	*bbytes = 0;
-	if(seq < win->next_seq) {
-		fwdoff = win->next_seq - seq;
-	} else {
-		fwdoff = seq - win->next_seq;
-	}
-
 	/* see it we can fit this offset */
-	if(fwdoff < win_available(win)) {
+	if(win->next_seq <= seq && seq <= (win_available(win) + win->next_seq - 1)) {
+		uint32_t fwdoff; /* fwd offset of elem seq */
+		if(seq < win->next_seq)
+			fwdoff = win->next_seq - seq;
+		else
+			fwdoff = seq - win->next_seq;
 		if(fwdoff == 0) {
 			Elem *temp;
 			/* elem is the next expected seq we can just use regular add */
