@@ -401,96 +401,7 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 			}
 		}
 		/* Set the longjump marker here */
-		if(sigsetjmp(env, 1) == 0) {
-send_payload:
-			/* send up to cwnd packets */
-			for(i = swin.in_flight; ((swin.in_flight < swin.cwnd) && i < win_count(&swin)) || deadlock; i++) {
-send_elem:
-				elem = win_get_index(&swin, i);
-				if((ret = send_pkt(sock, &elem->pkt, 0)) == -1) {
-					// Increment the retries attempt
-					retries += 1;
-					// TODO: Resend packet?
-					warn("Failed to send packet to client: %s\n. Attempting to resend.\n", strerror(errno));
-					// Check how many times we have retried
-					CHECK_RETRY(retries);
-					// If we have not performed too many retires
-					// attempt to send again
-					goto send_elem;
-				} else {
-					swin.in_flight++;
-					/* reset TCP deadlock so we don't send packets forever */
-					deadlock = false;
-				}
-			}
-			/* Print out the current state of the sending window */
-			display_window(&swin);
-			/* TODO: Make this timeout vary */
-			set_timeout(3, 0);
-			/* receive packet */
-			do {
-				if(swin.dup_ack == STCP_FAST_RETRANSMIT) {
-					/* Do Fast Retransmit */
-					clear_timeout();
-					swin.dup_ack = 0;
-					warn("3 Duplicate ACKs entering Fast Retransmit\n");
-					if(swin.cwnd > 1){
-						swin.cwnd = swin.cwnd/2;
-					}
-					swin.ssthresh = swin.cwnd;
-					swin.in_flight = 0;
-					goto send_payload;
-				}
-				/* Keep checking under the alarm condition until
-				   we timeout or get a good ack. */
-				ret = recv_pkt(sock, &ack, 0);
-				/* what if we get SIGALRM here????? Race condition */
-				if(ret < 0) {
-					error("Fatal error on recv: %s\n", strerror(errno));
-					sending = false;
-					success = false;
-					goto clean_up;
-				}
-				/* It doesn't matter if we get a SIGALRAM during this while
-				 * loop because these functions don't update critical
-				 * information in the sending window.
-				 */
-			} while(ret == 0 || !win_valid_ack(&swin, &ack) || win_dup_ack(&swin, &ack));
-			clear_timeout();
-
-			/* Decrement inflight packet count since ack was valid */
-			ret = win_remove_ack(&swin, &ack);
-			swin.in_flight -= ret;
-			/* TODO: Fix this HACK? When timeout occurs in_flight = 0 but stuff in Window*/
-			if(swin.in_flight < 0)
-				swin.in_flight = 0;
-			/* Update cwnd */
-			if(swin.cwnd < swin.ssthresh) {
-				if(swin.cwnd + ret < swin.ssthresh) {
-					swin.cwnd += ret;
-				} else {
-					swin.cwnd = swin.ssthresh;
-				}
-				// warn("Updated cwnd to %hu\n", swin.cwnd);
-			} else {
-				// TODO: Fix Congestion avoidance increment
-				// warn("Congestion avoidance cwnd: %hu\n", swin.cwnd);
-				swin.cwnd += swin.ssthresh * (swin.ssthresh / swin.cwnd);
-			}
-
-			/* Check to make sure we didn't do something stupid */
-			if(swin.in_flight < 0) {
-				error("Negative window.in_flight value.\n");
-				goto clean_up;
-			}
-
-			/* Check to see if we are done? */
-			if(win_count(&swin) == 0 && eof) {
-				debug("Exiting loop correctly.\n");
-				sending = false;
-				success = true;
-			}
-		} else {
+		if(sigsetjmp(env, 1) != 0)  {
 			/* Clear the alarm */
 			clear_timeout();
 			/* Handle timeout stuff here*/
@@ -520,7 +431,94 @@ send_elem:
 			// Check how many times we have retried
 			CHECK_RETRY(retries); // This should be per single element...?
 			// If we got here attempt to send again
-			goto send_payload;
+		}
+send_payload:
+		/* send up to cwnd packets */
+		for(i = swin.in_flight; ((swin.in_flight < swin.cwnd) && i < win_count(&swin)) || deadlock; i++) {
+send_elem:
+			elem = win_get_index(&swin, i);
+			if((ret = send_pkt(sock, &elem->pkt, 0)) < 0) {
+				// Increment the retries attempt
+				retries += 1;
+				// TODO: Resend packet?
+				warn("Failed to send packet to client: %s\n. Attempting to resend.\n", strerror(errno));
+				// Check how many times we have retried
+				CHECK_RETRY(retries);
+				// If we have not performed too many retires
+				// attempt to send again
+				goto send_elem;
+			} else {
+				swin.in_flight++;
+				/* reset TCP deadlock so we don't send packets forever */
+				deadlock = false;
+			}
+		}
+		/* Print out the current state of the sending window */
+		display_window(&swin);
+		/* TODO: Make this timeout vary */
+		set_timeout(3, 0);
+		/* receive packet */
+		do {
+			if(swin.dup_ack == STCP_FAST_RETRANSMIT) {
+				/* Do Fast Retransmit */
+				clear_timeout();
+				swin.dup_ack = 0;
+				warn("3 Duplicate ACKs entering Fast Retransmit\n");
+				if(swin.cwnd > 1){
+					swin.cwnd = swin.cwnd/2;
+				}
+				swin.ssthresh = swin.cwnd;
+				swin.in_flight = 0;
+				goto send_payload;
+			}
+			/* Keep checking under the alarm condition until
+			   we timeout or get a good ack. */
+			ret = recv_pkt(sock, &ack, 0);
+			/* what if we get SIGALRM here????? Race condition */
+			if(ret < 0) {
+				error("Fatal error on recv: %s\n", strerror(errno));
+				sending = false;
+				success = false;
+				goto clean_up;
+			}
+			/* It doesn't matter if we get a SIGALRAM during this while
+			 * loop because these functions don't update critical
+			 * information in the sending window.
+			 */
+		} while(ret == 0 || !win_valid_ack(&swin, &ack) || win_dup_ack(&swin, &ack));
+		clear_timeout();
+
+		/* Decrement inflight packet count since ack was valid */
+		ret = win_remove_ack(&swin, &ack);
+		swin.in_flight -= ret;
+		/* TODO: Fix this HACK? When timeout occurs in_flight = 0 but stuff in Window*/
+		if(swin.in_flight < 0)
+			swin.in_flight = 0;
+		/* Update cwnd */
+		if(swin.cwnd < swin.ssthresh) {
+			if(swin.cwnd + ret < swin.ssthresh) {
+				swin.cwnd += ret;
+			} else {
+				swin.cwnd = swin.ssthresh;
+			}
+			// warn("Updated cwnd to %hu\n", swin.cwnd);
+		} else {
+			// TODO: Fix Congestion avoidance increment
+			// warn("Congestion avoidance cwnd: %hu\n", swin.cwnd);
+			swin.cwnd += swin.ssthresh * (swin.ssthresh / swin.cwnd);
+		}
+
+		/* Check to make sure we didn't do something stupid */
+		if(swin.in_flight < 0) {
+			error("Negative window.in_flight value.\n");
+			goto clean_up;
+		}
+
+		/* Check to see if we are done? */
+		if(win_count(&swin) == 0 && eof) {
+			debug("Exiting loop correctly.\n");
+			sending = false;
+			success = true;
 		}
 	} while(sending);
 clean_up:
