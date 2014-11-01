@@ -334,6 +334,8 @@ int win_buffer_elem(Window *win, int fd);
  */
 Elem *win_get_index(Window *win, int startoff);
 
+int win_valid_seq(Window *win, uint32_t seq);
+
 /*
  * Returns true if the packet pointed to by pkt is a valid ACK for the current
  * state of sending window win. Duplicate ACK packets are valid and should

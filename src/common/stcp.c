@@ -607,7 +607,8 @@ int win_add_oor(Window *win, Elem *elem, int *bbytes) {
 	Elem *new_end = NULL;
 	*bbytes = 0;
 	/* see it we can fit this offset */
-	if(win->next_seq <= seq && seq <= (win_available(win) + win->next_seq - 1)) {
+	/* Validate seq */
+	if(win_valid_seq(win, seq)) {
 		uint32_t fwdoff; /* fwd offset of elem seq */
 		if(seq < win->next_seq)
 			fwdoff = win->next_seq - seq;
@@ -643,9 +644,12 @@ int win_add_oor(Window *win, Elem *elem, int *bbytes) {
 				oor_elem->valid = 1;
 			}
 		}
-	} else {
+	} else if(win_full(win)) {
 		/* no room in buffer */
-		debug("Recv window full. Dropping packet\n");
+		debug("Recv window full. Dropping packet with SEQ %u\n", seq);
+	} else {
+		/* The seq was outside the expected range */
+		debug("SEQ %u is outside currently valid range. Dropping packet\n", seq);
 	}
 
 	/* check if the last element in the window is the FIN and is readable */
@@ -721,6 +725,14 @@ Elem *win_get_index(Window *win, int startoff) {
 		elem = &win->buf[(win->start + startoff) % win->size];
 	}
 	return elem;
+}
+
+int win_valid_seq(Window *win, uint32_t seq) {
+	uint32_t seq_bound = win->next_seq + (uint32_t)win_available(win);
+	if(win->next_seq < seq_bound)
+		return (win->next_seq <= seq && seq < seq_bound);
+	else
+		return (win->next_seq <= seq || seq < seq_bound);
 }
 
 int win_valid_ack(Window *win, struct stcp_pkt *pkt) {
