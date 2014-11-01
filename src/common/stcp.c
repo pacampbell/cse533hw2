@@ -601,11 +601,7 @@ void win_clear(Window *win) {
 /**
  * Functions only for receiver side
  */
-/* TODO: BROKEN
-DEBUG: src/common/stcp.c:recv_pkt:472 Received pkt: seq:12, ack:0, win:0, flags:
-DEBUG: src/common/stcp.c:send_pkt:409 Sending pkt: seq:0, ack:14, win:21, flags: ACK
-| _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | 15 | 12 | _ | 18 | _ | _ | _ |
-*/
+
 int win_add_oor(Window *win, Elem *elem, int *bbytes) {
 	uint32_t seq = elem->pkt.hdr.seq;
 	Elem *new_end = NULL;
