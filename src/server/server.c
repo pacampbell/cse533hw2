@@ -387,13 +387,15 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 	}
 	/* Set the initial Advertised window of the client */
 	swin.rwin_adv = rwin_adv;
+	/* Print out the initial sending window */
+	display_window(&swin);
 	/* Commence file transfer */
 	do {
 		// set retries to zero
 		retries = 0;
 		// Populate the send buffer
 		while(!eof && win_count(&swin) < win_send_limit(&swin)) {
-			warn("Send limit: %d\n", win_send_limit(&swin));
+			// warn("Send limit: %d\n", win_send_limit(&swin));
 			// TODO: Check case when cwnd < count
 			if((ret = win_buffer_elem(&swin, fd)) < 0) {
 				/* critical error */
@@ -428,6 +430,8 @@ send_elem:
 					deadlock = false;
 				}
 			}
+			/* Print out the current state of the sending window */
+			display_window(&swin);
 			/* TODO: Make this timeout vary */
 			set_timeout(3, 0);
 			/* receive packet */
@@ -474,10 +478,10 @@ send_elem:
 				} else {
 					swin.cwnd = swin.ssthresh;
 				}
-				warn("Updated cwnd to %hu\n", swin.cwnd);
+				// warn("Updated cwnd to %hu\n", swin.cwnd);
 			} else {
 				// TODO: Fix Congestion avoidance increment
-				warn("Congestion avoidance cwnd: %hu\n", swin.cwnd);
+				// warn("Congestion avoidance cwnd: %hu\n", swin.cwnd);
 				swin.cwnd += swin.ssthresh * (swin.ssthresh / swin.cwnd);
 			}
 
@@ -528,6 +532,8 @@ send_elem:
 	} while(sending);
 clean_up:
 	clear_timeout();
+	/* Print out the current state of the sending window after being done */
+	display_window(&swin);
 	win_destroy(&swin);
 	return success;
 }
@@ -642,4 +648,104 @@ int server_transmit_payload2(int socket, int seq, int ack, struct stcp_pkt *pkt,
 		debug("Sent %d bytes to the client\n", bytes);
 	}
 	return bytes;
+}
+
+#define WINDOW_BORDER() do{printf("+------------------+"); \
+						   printf("------------------+"); \
+						   printf("------------------+"); \
+						   printf("------------------+\n");} while(0)
+
+#define WINDOW_ROW(v1Label, v1Value, v2Label, v2Value, v3Label, v3Value, v4Label, v4Value) do { \
+				   	 	 printf("| %-9s %-6d |", (v1Label), (v1Value)); \
+				   	 	 printf(" %-9s %-6d |", (v2Label), (v2Value)); \
+				   	 	 printf(" %-9s %-6d |", (v3Label), (v3Value)); \
+				   	 	 printf(" %-9s %-6d |\n", (v4Label), (v4Value)); \
+						} while(0)
+
+#define HEADER(label) do{ \
+						int size, i; \
+						printf("+------------------+\n"); \
+						printf("| %s", (label)); \
+						size = strlen((label)); \
+						for(i = 0; i < (20 - size - 4); i++) printf(" "); \
+						printf(" |\n"); \
+					} while(0);
+
+#define DIVIDER() printf("+------------------+------------------+------------------+" \
+						"------------------+\n")
+
+#define PRINT_ELEM(val, f) do { \
+							printf("| %-16" f " ", (val)); \
+						} while(0)
+
+#define PRINT_SINGLE_DIV() printf("+------------------")
+
+void display_window(Window *window) {
+	int i, j;
+	char pid_str[19];
+	// Convert pid to str
+	sprintf(pid_str, "PID: %d", getpid());
+	/* Print the pid Header */
+	HEADER(pid_str);
+	/* Print the window header */
+	WINDOW_BORDER();
+	/* Print our CWND - SEND Limit - ssthresh Retries ? */
+	WINDOW_ROW("CWND:", window->cwnd, "SNDLMT:", win_send_limit(window), "ssthresh:", window->ssthresh,
+		"Retries:", 0);
+	/* Seperate the rows */
+	DIVIDER();
+	/* Window Size - Count - in flight - ? */
+	WINDOW_ROW("WINSIZE:", window->size, "Count:", window->count, "INFLGHT:", window->in_flight,
+		"RWINADV:", window->rwin_adv);
+	/* Print the window footer */
+	WINDOW_BORDER();
+	/* Extra newline */
+	printf("\n");
+	/* Print buffer header */
+	HEADER("Sending Window");
+
+	/* Print the elem footer */
+	if(window->size < 4 && window->size % 4 != 0) {
+		for(j = 0; j < window->size % 4; j++) {
+			PRINT_SINGLE_DIV();
+		}
+		printf("+\n");
+	} else {
+		DIVIDER();
+	}
+	
+	/* Print Elements */
+	for(i = 0; i < window->size; ++i) {
+		Elem *elem =  &window->buf[i];
+		// Print out the last pipe and newline 
+		if(i % 4 == 0 && i != 0) {
+			printf("|\n");
+			/* Print divider */
+			DIVIDER();
+		}
+		// Print out the element information
+		if(elem->valid) {
+			PRINT_ELEM(elem->pkt.hdr.seq, "d");
+		} else {
+			PRINT_ELEM("_", "s");
+		}
+	}
+	/* Handle end of window */
+	if(i % 4) {
+		printf("|\n");
+	} else {
+		printf("|\n");
+		/* Print divider */
+		DIVIDER();
+	}
+	/* Print the elem footer */
+	for(j = 0; j < window->size % 4; j++) {
+		PRINT_SINGLE_DIV();
+	}
+	/* Print out the final + for the table output */
+	if(i != 4 && i % 4 != 0) {
+		printf("+\n");
+	}
+	/* Buffer with an extra newline */
+	printf("\n");
 }

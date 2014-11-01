@@ -106,4 +106,11 @@ int server_transmit_payload2(int socket, int seq, int ack,
     struct stcp_pkt *pkt, Process *process, int flags, void *data, 
     int datalen);
 
+/**
+ * Displays information about the contents of the window in the 
+ * the ring buffer.
+ * @param window Window to display information about.
+ */ 
+void display_window(Window *window);
+
 #endif
