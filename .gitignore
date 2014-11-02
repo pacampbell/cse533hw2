@@ -34,6 +34,8 @@ prifinfo_plus
 # Project binary folders
 client
 server
+*.in
+*.txt
 
 # Clion
 .idea/
