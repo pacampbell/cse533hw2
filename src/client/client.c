@@ -99,11 +99,11 @@ int main(int argc, char *argv[]) {
 		/* Consumer thread failed */
 		error("Consumer: failed to read file from window.\n");
 		goto stcp_failure;
+	} else if(exit_status == PTHREAD_CANCELED) {
+		info("Consumer: exited after cancelation\n");
 	} else {
-		success("Consumer: read %d byte file '%s' from window.\n",
-				*exit_status, config.filename);
-		/* free thread's return status */
-		free(exit_status);
+		success("Consumer: read %lu byte file '%s' from window.\n",
+				(size_t)exit_status, config.filename);
 	}
 	/* close the STCP socket */
 	if(stcp_close(&stcp) < 0) {
@@ -265,16 +265,9 @@ void *runConsumer(void *arg) {
 	struct consumer_args *args = arg;
     struct stcp_sock *stcp = args->stcp;
 	int err, oldtype, oldstate;
-	int *total_bytes;
+	size_t total_bytes = 0;
 	char read_buf[STCP_MAX_DATA * stcp->win.size];
 	int nread;
-
-	/* allocate space for our exit status */
-	if((total_bytes = malloc(sizeof(int))) == NULL) {
-		error("Consumer: malloc failed\n");
-		pthread_exit(NULL);
-	}
-	*total_bytes = 0;
 
 	/* Allow this thread to be canceled at anytime */
 	if((err = pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldtype)) != 0) {
@@ -304,18 +297,18 @@ void *runConsumer(void *arg) {
 			pthread_exit(NULL);
 		} else if(rv == 0) {
 			/* Consumer read EOF */
-			*total_bytes += nread;
+			total_bytes += nread;
 			break;
 		}
 		/* Increment the total # of bytes read */
-		*total_bytes += nread;
+		total_bytes += nread;
 		/* Re-enable cancelability */
 		if((err = pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &oldstate)) != 0) {
 			error("pthread_setcanceltype: %s\n", strerror(err));
 			pthread_exit(NULL);
 		}
 	}
-	pthread_exit(total_bytes);
+	pthread_exit((void *)total_bytes);
 }
 
 void timeval_diff(struct timeval *start, struct timeval *end, struct timeval *diff) {
