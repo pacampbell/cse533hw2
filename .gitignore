@@ -32,7 +32,8 @@
 prifinfo_plus
 
 # Project binary folders
-bin
+client
+server
 
 # Clion
 .idea/
