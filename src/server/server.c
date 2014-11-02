@@ -372,20 +372,20 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 	bool sending = true;
 	bool eof = false;
 	bool deadlock = false;
-	int retries = 0;
+	struct rtt_info rtt;
 	/* Get ourselves a sliding window buffer */
 	if(win_init(&swin, win_size, init_seq) < 0) {
 		error("Failed to initialize sliding window.\n");
 		return -1;
 	}
+	/* Init the rtt struct */
+	rtt_init(&rtt);
 	/* Set the initial Advertised window of the client */
 	swin.rwin_adv = rwin_adv;
 	/* Print out the initial sending window */
-	display_window(&swin);
+	display_window(&swin, &rtt);
 	/* Commence file transfer */
 	do {
-		// set retries to zero
-		retries = 0;
 		// Populate the send buffer
 		while(!eof && win_count(&swin) < win_send_limit(&swin)) {
 			// warn("Send limit: %d\n", win_send_limit(&swin));
@@ -402,14 +402,16 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 		}
 		/* Set the longjump marker here */
 		if(sigsetjmp(env, 1) != 0)  {
-			/* Clear the alarm */
-			clear_timeout();
-			/* Handle timeout stuff here*/
-			warn("TODO: Handling timeout.\n");
+			/* Handle timeout stuff here */
+			warn("Handling timeout.\n");
 			// Set inflight to zero (everything was lost)
 			swin.in_flight = 0;
-			// Increment the retries attempt
-			retries += 1;
+			if(rtt_timeout(&rtt) == -1) {
+				/* We reach max retries time to quit! */
+				error("Transfer failed reached max retransmission attempts!\n");
+				success = false;
+				goto clean_up;
+			}
 			if(swin.rwin_adv == 0) {
 				/* Handle TCP DEADLOCK */
 				deadlock = true;
@@ -428,35 +430,31 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 			}
 			// Handle nonsense with ssthresh
 			SLOW_START(swin);
-			// Check how many times we have retried
-			CHECK_RETRY(retries); // This should be per single element...?
-			// If we got here attempt to send again
 		}
 send_payload:
 		/* send up to cwnd packets */
 		for(i = swin.in_flight; ((swin.in_flight < swin.cwnd) && i < win_count(&swin)) || deadlock; i++) {
-send_elem:
 			elem = win_get_index(&swin, i);
 			if((ret = send_pkt(sock, &elem->pkt, 0)) < 0) {
-				// Increment the retries attempt
-				retries += 1;
-				// TODO: Resend packet?
-				warn("Failed to send packet to client: %s\n. Attempting to resend.\n", strerror(errno));
-				// Check how many times we have retried
-				CHECK_RETRY(retries);
-				// If we have not performed too many retires
-				// attempt to send again
-				goto send_elem;
+				error("Fatal error on send: %s\n", strerror(errno));
+				goto clean_up;
 			} else {
+				/* Set the usec timestamp for this element */
+				elem->sent_ts = rtt_getusec();
 				swin.in_flight++;
 				/* reset TCP deadlock so we don't send packets forever */
 				deadlock = false;
 			}
 		}
+		/* Copy the sent timestamp for the most outstanding packet */
+		elem = win_oldest(&swin);
+		if(elem == NULL) {
+			error("WTF elem should not be NULL\n");
+		}
+		rtt.rtt_base = elem->sent_ts;
 		/* Print out the current state of the sending window */
-		display_window(&swin);
-		/* TODO: Make this timeout vary */
-		set_timeout(3, 0);
+		display_window(&swin, &rtt);
+		set_timeout(&rtt);
 		/* receive packet */
 		do {
 			if(swin.dup_ack == STCP_FAST_RETRANSMIT) {
@@ -487,6 +485,14 @@ send_elem:
 			 */
 		} while(ret == 0 || !win_valid_ack(&swin, &ack) || win_dup_ack(&swin, &ack));
 		clear_timeout();
+		/* Update rtt only for the next expected ACK (not for duplicates) */
+		//warn("swin.next_ack=%u, ack.hdr.ack=%u\n", swin.next_ack, ack.hdr.ack);
+		if(swin.next_ack == ack.hdr.ack) {
+			rtt_stop(&rtt);
+			warn("Updating RTT\n");
+		}
+		/* reset number of retries to 0 */
+		rtt_newpack(&rtt);
 
 		/* Decrement inflight packet count since ack was valid */
 		ret = win_remove_ack(&swin, &ack);
@@ -524,7 +530,7 @@ send_elem:
 clean_up:
 	clear_timeout();
 	/* Print out the current state of the sending window after being done */
-	display_window(&swin);
+	display_window(&swin, &rtt);
 	win_destroy(&swin);
 	return success;
 }
@@ -553,8 +559,11 @@ static void sigchld_handler(int signum, siginfo_t *siginfo, void *context) {
 	}
 }
 
-static void set_timeout(long int sec, long int usec) {
+static void set_timeout(struct rtt_info *rtt) {
 	struct itimerval timer;
+	long int sec,usec;
+	sec = (long int)rtt->rtt_rto / 1000000L;
+	usec = (long int)rtt->rtt_rto % 1000000L;
 	timer.it_value.tv_sec = sec;
 	timer.it_value.tv_usec = usec;
 	timer.it_interval.tv_sec = sec;
@@ -670,7 +679,7 @@ int server_transmit_payload2(int socket, int seq, int ack, struct stcp_pkt *pkt,
 
 #define PRINT_SINGLE_DIV() printf("+------------------")
 
-void display_window(Window *window) {
+void display_window(Window *window, struct rtt_info *rtt) {
 	int i, j;
 	char pid_str[19];
 	// Convert pid to str
@@ -681,7 +690,7 @@ void display_window(Window *window) {
 	WINDOW_BORDER();
 	/* Print our CWND - SEND Limit - ssthresh Retries ? */
 	WINDOW_ROW("CWND:", window->cwnd, "SNDLMT:", win_send_limit(window), "ssthresh:", window->ssthresh,
-		"Retries:", 0);
+		"nrexmt:", rtt->rtt_nrexmt);
 	/* Seperate the rows */
 	DIVIDER();
 	/* Window Size - Count - in flight - ? */

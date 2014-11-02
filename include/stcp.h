@@ -48,6 +48,7 @@ typedef struct {
 	struct stcp_pkt pkt;	/* Packet to buffer */
 	/* stuff only for sending window element */
 	/* TODO: add rtt_info and other stuff */
+	uint64_t sent_ts;		/* Microsec UNIX ts of the sending time */
 } Elem;
 
 /* STCP sliding window */

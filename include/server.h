@@ -6,7 +6,7 @@
 #include <stdbool.h>
 // system headers
 #include <sys/socket.h>
-#include <sys/select.h> 
+#include <sys/select.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -16,6 +16,7 @@
 // Program headers
 #include "utility.h"
 #include "stcp.h"
+#include "unprtt.h"
 #include "interfaces.h"
 #include "child_process.h"
 #include "unpifiplus.h"
@@ -68,7 +69,7 @@ static void sigalrm_timeout(int signum, siginfo_t *siginfo, void *context);
 /**
  * Sets the timeout for sigalrm.
  */
-static void set_timeout(long int sec, long int usec);
+static void set_timeout(struct rtt_info *rtt);
 
 /**
  * Clears the alarm timer and sets back
@@ -111,6 +112,6 @@ int server_transmit_payload2(int socket, int seq, int ack,
  * the ring buffer.
  * @param window Window to display information about.
  */ 
-void display_window(Window *window);
+void display_window(Window *window, struct rtt_info *rtt);
 
 #endif

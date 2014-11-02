@@ -33,7 +33,7 @@ void ntoh_hdr(struct stcp_hdr *hdr) {
 }
 
 void print_hdr(struct stcp_hdr *hdr) {
-	printf(KWHT "seq:%u, ack:%u, win:%hu, flags: %s%s%s\b\n" KNRM, hdr->seq, hdr->ack,
+	printf(KWHT "seq:%u, ack:%u, win:%hu, flags: %s%s%s\n" KNRM, hdr->seq, hdr->ack,
 			hdr->win,
 			(hdr->flags & STCP_FIN)? "FIN " : "",
 			(hdr->flags & STCP_SYN)? "SYN " : "",
@@ -498,7 +498,7 @@ int win_init(Window *win, int win_size, uint32_t initial_seq) {
 	win->count = 0;
 	win->size = win_size;
 	win->next_seq = initial_seq;
-	win->next_ack = initial_seq;
+	win->next_ack = initial_seq + 1;
 	win->in_flight = 0;
 	/* Slow Start values */
 	win->cwnd = 1;
