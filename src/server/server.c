@@ -504,12 +504,16 @@ send_payload:
 				swin.cwnd += ret;
 			} else {
 				swin.cwnd = swin.ssthresh;
+				cwnd_inc = 0;
 			}
 			// warn("Updated cwnd to %hu\n", swin.cwnd);
 		} else {
-			// TODO: Fix Congestion avoidance increment
-			// warn("Congestion avoidance cwnd: %hu\n", swin.cwnd);
-			swin.cwnd += swin.ssthresh * (swin.ssthresh / swin.cwnd);
+			/* Increment swin.cwnd by 1 for each cwnd packets we get acks for */
+			cwnd_inc += ret;
+			if(cwnd_inc == swin.cwnd) {
+				swin.cwnd += 1;
+				cwnd_inc = 0;
+			}
 		}
 
 		/* Check to make sure we didn't do something stupid */

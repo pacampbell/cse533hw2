@@ -100,7 +100,7 @@ int main(int argc, char *argv[]) {
 		error("Consumer: failed to read file from window.\n");
 		goto stcp_failure;
 	} else if(exit_status == PTHREAD_CANCELED) {
-		info("Consumer: exited after cancelation\n");
+		info("Consumer: exited after cancellation\n");
 	} else {
 		success("Consumer: read %lu byte file '%s' from window.\n",
 				(size_t)exit_status, config.filename);
