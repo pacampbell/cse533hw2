@@ -1,13 +1,9 @@
 # Set the C compiler
 CC = gcc
 
-# Check for colors
-# COLOR_CHECK = $(shell tput -T${TERM} colors)
-# -DCOLOR=$(COLOR_CHECK)
-
 # Set the C flags to be used by the compiler
 CFLAGS = -g -Wall -Werror -std=gnu89 -DCOLOR
-IINC = -Iinclude
+IINC =
 LIBS = -lm -lpthread
 
 # Attempt to figure out what system we are on
@@ -26,20 +22,16 @@ ifeq ($(UNAME), SunOS)
 endif
 
 # List the source directories
-SRC = src
+SRC = $(wildcard *.c)
 PROJECTS = $(SERVER) $(CLIENT)
 
 # Variables incase we need to change name
 SERVER = server
 CLIENT = client
-IFI = Asgn2_code
-IFI_FILE = get_ifi_info_plus
 
-# Set the directory to place the compiled binaries
-BINDIR = bin
+# Server dependencies
+SERVER_DEPS = server.o get_ifi_info_plus.o interfaces.o child_process.o stcp.o unprtt.o utility.o
+CLIENT_DEPS = client.o get_ifi_info_plus.o interfaces.o stcp.o utility.o
 
 # Resources
 RESOURCES_DIR = resources
-
-# Make bin dir and copy files command
-MAKE_BIN = $(shell mkdir -p $(BINDIR) && cp $(RESOURCES_DIR)/* $(BINDIR))
