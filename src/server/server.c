@@ -373,6 +373,7 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 	bool eof = false;
 	bool deadlock = false;
 	struct rtt_info rtt;
+	int cwnd_inc;
 	/* Get ourselves a sliding window buffer */
 	if(win_init(&swin, win_size, init_seq) < 0) {
 		error("Failed to initialize sliding window.\n");
