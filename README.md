@@ -14,6 +14,7 @@
 2. Changed to integer arithmetic rather than floating point.
 3. Changed base time to millisec instead of seconds
 3. Changed rtt_init to initialize rttvar to 3000 ms ((0.75s * 1000) << 4)
+4. Each element in our send buffer keeps its own send timestamp which we use for calculating timeouts using RTT.
 
 ## ARQ mechanism 
 TODO
