@@ -102,8 +102,8 @@ int main(int argc, char *argv[]) {
 	} else if(exit_status == PTHREAD_CANCELED) {
 		info("Consumer: exited after cancellation\n");
 	} else {
-		success("Consumer: read %lu byte file '%s' from window.\n",
-				(size_t)exit_status, config.filename);
+		success("Consumer: read %d byte file '%s' from window.\n",
+				(int)((size_t)exit_status), config.filename);
 	}
 	/* close the STCP socket */
 	if(stcp_close(&stcp) < 0) {
