@@ -102,9 +102,9 @@ int main(int argc, char *argv[]) {
 	} else {
 		success("Consumer: read %d byte file '%s' from window.\n",
 				*exit_status, config.filename);
+		/* free thread's return status */
+		free(exit_status);
 	}
-	/* free thread's return status */
-	free(exit_status);
 	/* close the STCP socket */
 	if(stcp_close(&stcp) < 0) {
 		error("stcp_close: %s\n", strerror(errno));

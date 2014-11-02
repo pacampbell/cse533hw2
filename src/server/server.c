@@ -441,17 +441,15 @@ send_payload:
 			} else {
 				/* Set the usec timestamp for this element */
 				elem->sent_ts = rtt_getusec();
+				if(i == 0) {
+					/* Copy the sent timestamp for the most outstanding packet */
+					rtt.rtt_base = elem->sent_ts;
+				}
 				swin.in_flight++;
 				/* reset TCP deadlock so we don't send packets forever */
 				deadlock = false;
 			}
 		}
-		/* Copy the sent timestamp for the most outstanding packet */
-		elem = win_oldest(&swin);
-		if(elem == NULL) {
-			error("WTF elem should not be NULL\n");
-		}
-		rtt.rtt_base = elem->sent_ts;
 		/* Print out the current state of the sending window */
 		display_window(&swin, &rtt);
 		set_timeout(&rtt);
@@ -489,7 +487,7 @@ send_payload:
 		//warn("swin.next_ack=%u, ack.hdr.ack=%u\n", swin.next_ack, ack.hdr.ack);
 		if(swin.next_ack == ack.hdr.ack) {
 			rtt_stop(&rtt);
-			warn("Updating RTT\n");
+			debug("Updating RTT\n");
 		}
 		/* reset number of retries to 0 */
 		rtt_newpack(&rtt);
