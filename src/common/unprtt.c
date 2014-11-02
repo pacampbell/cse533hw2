@@ -21,7 +21,7 @@ void rtt_init(struct rtt_info *ptr) {
 	ptr->rtt_base   = 0;
 	ptr->rtt_rtt    = 0;
 	ptr->rtt_srtt   = 0;
-	ptr->rtt_rttvar = 3000000; /* .75s * 4 = 3s ==> 3000ms */
+	ptr->rtt_rttvar = 3000000; /* .75s * 4 = 3s ==> 3000000us */
 	/* first RTO at (srtt + (4 * rttvar)) = 3 seconds */
 	ptr->rtt_rto    = rtt_minmax(RTT_RTOCALC(ptr));
 	ptr->rtt_nrexmt = 0;
