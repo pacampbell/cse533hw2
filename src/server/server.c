@@ -686,7 +686,7 @@ void display_window(Window *window, struct rtt_info *rtt) {
 	int i, j;
 	char pid_str[19];
 	// Convert pid to str
-	sprintf(pid_str, "PID: %u", getpid());
+	sprintf(pid_str, "PID: %d", (int)getpid());
 	/* Print the pid Header */
 	HEADER(pid_str);
 	/* Print the window header */
