@@ -26,4 +26,4 @@ clean:
 	rm -f *.o $(SERVER) $(CLIENT)
 
 handin:
-	~cse533/handin 2 Makefile Makefile.common README.md $(SRC) $(HDR)
+	/home/courses/cse533/handin 2 Makefile Makefile.common README.md $(SRC) $(HDR)
