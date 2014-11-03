@@ -244,7 +244,7 @@ int stcp_connect(struct stcp_sock *stcp, struct sockaddr_in *serv_addr, char *fi
  * 3. If seq > expected, buffer(if space is avail) P and send duplicate ACK
  */
 int stcp_client_recv(struct stcp_sock *stcp, int *bbytes) {
-	int len, err, done;
+	int len, done;
 	struct stcp_pkt ack_pkt;
 	uint16_t flags;
 	Elem elem;
@@ -252,11 +252,6 @@ int stcp_client_recv(struct stcp_sock *stcp, int *bbytes) {
 	/* default return 0 (we are not done) */
 	done = 0;
 	*bbytes = 0;
-	/* Acquire mutex */
-	if((err = pthread_mutex_lock(&stcp->mutex)) != 0) {
-		error("pthread_mutex_lock: %s\n", strerror(err));
-		return -1;
-	}
 
 	/* Attempt to receive packet */
 	len = recv_pkt(stcp->sockfd, &elem.pkt, 0);
@@ -267,8 +262,19 @@ int stcp_client_recv(struct stcp_sock *stcp, int *bbytes) {
 		/* The recv_pkt was invalid */
 		done = 0;
 	} else {
-		/* Add the (potentially out-of-order) data packet */
-		done = win_add_oor(&stcp->win, &elem, bbytes);
+		int err;
+		/* Acquire mutex */
+		if((err = pthread_mutex_lock(&stcp->mutex)) != 0) {
+			error("pthread_mutex_lock: %s\n", strerror(err));
+			return -1;
+		}
+		if(win_full(&stcp->win)) {
+			warn("Receiving Window is full! Dropping SEQ: %u\n", elem.pkt.hdr.seq);
+			done = 0;
+		} else {
+			/* Add the (potentially out-of-order) data packet */
+			done = win_add_oor(&stcp->win, &elem, bbytes);
+		}
 		flags = STCP_ACK;
 		if(done) {
 			info("Producer: buffered FIN, sending FIN ACK.\n");
@@ -281,13 +287,13 @@ int stcp_client_recv(struct stcp_sock *stcp, int *bbytes) {
 			error("Failed to send: %s", strerror(errno));
 			done = -1;
 		}
+		/* Release mutex */
+		if((err = pthread_mutex_unlock(&stcp->mutex)) != 0) {
+			error("pthread_mutex_unlock: %s\n", strerror(err));
+			return -1;
+		}
 	}
 
-	/* Release mutex */
-	if((err = pthread_mutex_unlock(&stcp->mutex)) != 0) {
-		error("pthread_mutex_unlock: %s\n", strerror(err));
-		return -1;
-	}
 	return done;
 }
 
