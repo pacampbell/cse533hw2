@@ -407,6 +407,7 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 			warn("Handling timeout.\n");
 			// Set inflight to zero (everything was lost)
 			swin.in_flight = 0;
+			swin.dup_ack = 0;
 			if(rtt_timeout(&rtt) == -1) {
 				/* We reach max retries time to quit! */
 				error("Transfer failed reached max retransmission attempts!\n");
