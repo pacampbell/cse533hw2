@@ -406,7 +406,7 @@ int send_pkt(int sockfd, struct stcp_pkt *pkt, int flags) {
 	int rv;
 	/* DROP */
 	if(rand() < loss_thresh) {
-		warn("Dropped on send ");
+		warn("Dropped on send: ");
 		print_hdr(&pkt->hdr);
 		/* return as if we succeeded */
 		return sizeof(struct stcp_hdr) + pkt->dlen;
