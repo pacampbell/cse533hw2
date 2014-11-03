@@ -23,6 +23,7 @@ endif
 
 # List the source directories
 SRC = $(wildcard *.c)
+HDR = $(wildcard *.h)
 PROJECTS = $(SERVER) $(CLIENT)
 
 # Variables incase we need to change name
