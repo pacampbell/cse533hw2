@@ -509,6 +509,7 @@ int win_init(Window *win, int win_size, uint32_t initial_seq) {
 	/* Slow Start values */
 	win->cwnd = 1;
 	win->ssthresh = 65535; /* Max value initially */
+	win->dup_ack = 0;
 	/* Allocate space for the receiving window */
 	win->buf = calloc(win_size, sizeof(Elem));
 	if(win->buf == NULL) {

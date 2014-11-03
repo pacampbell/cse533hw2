@@ -17,7 +17,10 @@
 4. Each element in our send buffer keeps its own send timestamp which we use for calculating timeouts using RTT. 
 
 ## ARQ mechanism 
-Implemented Congestion control, Flow control, Fast retransmit on 3 duplicate ACKs, TCP deadlock avoidance (by sending probes after each RTO)
+1. Flow control by limiting sending to the receivers advertised window size.
+2. Implemented Congestion control with SlowStart, Congestion Avoidence, and Fast Retransmit.
+3. Fast retransmit on 3 duplicate ACKs.
+4. TCP deadlock avoidance when the receivers advertised window is 0 (by sending probes after each RTO)
 
 ## Closing logic 
 

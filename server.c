@@ -353,11 +353,6 @@ clean_up:
 	}
 }
 
-
-#define CHECK_RETRY(c) do{if((c) >= MAX_TIMEOUT_ATTEMPTS){ \
-					error("Failed retries attempt.\n"); \
-					goto clean_up;}}while(0)
-
 #define SLOW_START(c) do{ \
 				(c).ssthresh = (c).cwnd / 2; \
 				if((c).ssthresh == 0){(c).ssthresh = 1;}\
@@ -404,7 +399,9 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 		/* Set the longjump marker here */
 		if(sigsetjmp(env, 1) != 0)  {
 			/* Handle timeout stuff here */
-			warn("Handling timeout.\n");
+			// Handle nonsense with ssthresh
+			SLOW_START(swin);
+			warn("RTO reached. Updated cwnd: %hu ssthresh: %hu\n", swin.cwnd, swin.ssthresh);
 			// Set inflight to zero (everything was lost)
 			swin.in_flight = 0;
 			swin.dup_ack = 0;
@@ -430,8 +427,6 @@ int transfer_file(int sock, int fd, unsigned int win_size, uint32_t init_seq,
 					}
 				}
 			}
-			// Handle nonsense with ssthresh
-			SLOW_START(swin);
 		}
 send_payload:
 		/* send up to cwnd packets */
@@ -461,12 +456,12 @@ send_payload:
 				/* Do Fast Retransmit */
 				clear_timeout();
 				swin.dup_ack = 0;
-				warn("3 Duplicate ACKs entering Fast Retransmit\n");
+				swin.in_flight = 0;
 				if(swin.cwnd > 1){
 					swin.cwnd = swin.cwnd/2;
 				}
 				swin.ssthresh = swin.cwnd;
-				swin.in_flight = 0;
+				warn("FastRetransmit: Recv 3 Dup ACKs. Updated cwnd: %hu ssthresh: %hu\n", swin.cwnd, swin.ssthresh);
 				goto send_payload;
 			}
 			/* Keep checking under the alarm condition until
@@ -497,7 +492,6 @@ send_payload:
 		/* Decrement inflight packet count since ack was valid */
 		ret = win_remove_ack(&swin, &ack);
 		swin.in_flight -= ret;
-		/* TODO: Fix this HACK? When timeout occurs in_flight = 0 but stuff in Window*/
 		if(swin.in_flight < 0)
 			swin.in_flight = 0;
 		/* Update cwnd */
@@ -508,13 +502,14 @@ send_payload:
 				swin.cwnd = swin.ssthresh;
 				cwnd_inc = 0;
 			}
-			// warn("Updated cwnd to %hu\n", swin.cwnd);
+			info("SlowStart: Received ACK for %d packets. Updated cwnd to %hu\n", ret, swin.cwnd);
 		} else {
 			/* Increment swin.cwnd by 1 for each cwnd packets we get acks for */
 			cwnd_inc += ret;
-			if(cwnd_inc == swin.cwnd) {
+			if(cwnd_inc >= swin.cwnd) {
 				swin.cwnd += 1;
 				cwnd_inc = 0;
+				info("CongestionAvoidance: Received ACKs for cwnd packets. Updated cwnd to %hu\n", swin.cwnd);
 			}
 		}
 
@@ -572,7 +567,8 @@ static void set_timeout(struct rtt_info *rtt) {
 	timer.it_value.tv_usec = usec;
 	timer.it_interval.tv_sec = sec;
 	timer.it_interval.tv_usec = usec;
-	debug("Setting timeout for %ld seconds and %ld microseconds.\n", sec, usec);
+	info("RTO: %ldsecs + %ldusecs. SRTT: %dusecs. RTTVAR: %dusecs.\n", sec,
+			usec, rtt->rtt_srtt, rtt->rtt_rttvar);
 	setitimer(ITIMER_REAL, &timer, NULL);
 }
 
