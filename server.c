@@ -328,6 +328,8 @@ void childprocess(Process *process, struct stcp_pkt *pkt) {
 			}
 
 			/* Connection established start sending file */
+			info("Connected with client %s:%hu. Starting transfer.",
+					inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
 			/* TODO: Must mask SIGALRM during read and make sure it is in the Window */
 			if(transfer_file(sock, fd, process->interface_win_size, init_seq + 1, rwin_adv)) {
 				success("Child Server %u transfered '%s' to %s:%u\n",
