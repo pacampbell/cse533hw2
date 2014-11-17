@@ -1,21 +1,20 @@
 CC = gcc
-FLAGS =  -Wall -Werror -std=c89
+FLAGS =  -Wall -Werror -std=c89 -DCOLOR
 LIBS =
 
-# server client
 SERVER = server
 CLIENT = client
-LIB = libapi.so
+LIB = libapi.a
 
 TARGETS = $(LIB)
 
 all: $(TARGETS)
 
-libapi.so: api.o api.h
-	$(CC) $(FLAGS) -shared -o $(LIB) api.o
+$(LIB): api.o api.h
+	ar -cvq $(LIB) api.o
 
 api.o: api.c api.h
-	$(CC) $(FLAGS) -fPIC -c api.c
+	$(CC) $(FLAGS) -c api.c
 
 clean:
 	rm -f *.o $(TARGETS)
